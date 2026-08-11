@@ -1,0 +1,45 @@
+{
+  // Build outputs churn thousands of files during `expo run:android`. Watching
+  // them pins memory in the VS Code file-watcher and extension host, and burns
+  // inotify handles that Metro also needs.
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/android/build/**": true,
+    "**/android/app/build/**": true,
+    "**/android/app/.cxx/**": true,
+    "**/android/.gradle/**": true,
+    "**/android/.kotlin/**": true,
+    "**/ios/build/**": true,
+    "**/ios/Pods/**": true,
+    "**/.expo/**": true,
+    "**/dist/**": true,
+    "**/web-build/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true
+  },
+
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/android/build": true,
+    "**/android/app/build": true,
+    "**/android/app/.cxx": true,
+    "**/android/.gradle": true,
+    "**/ios/build": true,
+    "**/ios/Pods": true,
+    "**/.expo": true,
+    "**/dist": true,
+    "**/package-lock.json": true
+  },
+
+  "files.exclude": {
+    "**/android/.gradle": true,
+    "**/android/app/.cxx": true,
+    "**/.expo": true
+  },
+
+  // Keep the TS server off the generated native trees and bounded in memory.
+  "typescript.tsserver.maxTsServerMemory": 3072,
+  "typescript.tsdk": "node_modules/typescript/lib",
+
+  "files.eol": "\n"
+}

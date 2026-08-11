@@ -16,10 +16,12 @@
     "android": "expo run:android",
     "android:device": "expo run:android --device",
     "android:release": "expo run:android --variant release",
+    "emulator": "bash scripts/emulator.sh",
     "prebuild": "expo prebuild --platform android",
     "prebuild:clean": "expo prebuild --platform android --clean",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
   },
   "private": true,
   "devDependencies": {
