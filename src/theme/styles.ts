@@ -9,9 +9,9 @@ export const controls = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.inputBorder,
     borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
     color: colors.text,
     backgroundColor: colors.surface,
     flexDirection: 'row',
@@ -22,12 +22,12 @@ export const controls = StyleSheet.create({
 
 export const forms = StyleSheet.create({
   label: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: colors.text,
-    marginBottom: 6,
-    marginTop: 12,
+    marginBottom: 7,
+    marginTop: 13,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
-  rowLabel: { width: 78, fontSize: 13, fontWeight: '600', color: colors.textSubtle },
+  rowLabel: { width: 78, fontSize: 14, fontWeight: '700', color: colors.textSubtle },
 })

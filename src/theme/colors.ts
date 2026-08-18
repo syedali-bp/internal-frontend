@@ -2,43 +2,43 @@
 // rebrand is one edit rather than a grep across every StyleSheet.
 export const colors = {
   // Surfaces
-  screen: '#ffffff',
-  surface: '#ffffff',
-  headerBg: '#f7f8fa',
-  border: '#dfe3e8',
-  inputBorder: '#c9ced6',
-  backdrop: 'rgba(0,0,0,0.35)',
+  screen: '#050607',
+  surface: '#0f1311',
+  headerBg: '#111613',
+  border: '#223027',
+  inputBorder: '#304237',
+  backdrop: 'rgba(0,0,0,0.72)',
 
   // Text
-  text: '#1f2430',
-  textSubtle: '#3a4250',
-  textMuted: '#5b6472',
-  placeholder: '#9aa0aa',
+  text: '#eef3ee',
+  textSubtle: '#c5d0c6',
+  textMuted: '#8fa094',
+  placeholder: '#65746a',
 
   // Variant / brand accent
-  primary: '#6b4ef0',
-  primarySoft: '#b3a4e8',
-  primaryBorder: '#d9cffa',
-  primaryBg: '#faf8ff',
-  primaryHighlight: '#f0ecfe',
+  primary: '#27c26a',
+  primarySoft: '#3b7a54',
+  primaryBorder: '#244c32',
+  primaryBg: '#0f1a13',
+  primaryHighlight: '#16331f',
 
   // Attribute section accent
-  attribute: '#2e7d4f',
-  attributeBorder: '#cfe9d5',
-  attributeBg: '#f5fbf6',
+  attribute: '#66d18a',
+  attributeBorder: '#23402d',
+  attributeBg: '#0d1510',
 
   // Feedback
-  danger: '#d14343',
-  dangerText: '#c0392b',
-  dangerBorder: '#f3c2c2',
-  dangerBg: '#fdf3f3',
+  danger: '#ff6b6b',
+  dangerText: '#ff8a8a',
+  dangerBorder: '#4d2424',
+  dangerBg: '#1a0f10',
 
   // Call to action
-  accent: '#f26522',
-  onAccent: '#ffffff',
+  accent: '#27c26a',
+  onAccent: '#07110a',
 
   // JSON preview
-  codeBg: '#1f2430',
-  codeText: '#d7e3ff',
-  codeLabel: '#9aa0aa',
+  codeBg: '#0b0f0d',
+  codeText: '#d8ffe5',
+  codeLabel: '#89a18f',
 } as const
