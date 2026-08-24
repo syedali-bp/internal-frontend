@@ -33,7 +33,14 @@ export type PackagingLevelDraft = {
 /** Everything the add-product form captures about the product itself. */
 export type ProductDetails = {
   name: string
-  brand: string
+  /**
+   * Who makes it, and the brand it sells under — both catalog ids, both
+   * optional and independent of each other. Picking a manufacturer narrows the
+   * brand list to its brands, but a brand can be picked with none chosen: a
+   * collector reading a pack often knows the brand and not the maker.
+   */
+  manufacturerId: string
+  brandId: string
   description: string
   categoryId: string
   verticalId: string
@@ -72,6 +79,17 @@ export type SubmissionPayload = {
   captured_at: string
   product: {
     name: string
+    /**
+     * The pair as captured. The ids are what a moderator resolves against the
+     * catalog; the names ride along so the submission reads on its own, the
+     * same reason `category_path` is carried next to `category_id`. Null id
+     * means the collector did not record one.
+     */
+    manufacturer_id: string | null
+    manufacturer_name: string
+    brand_id: string | null
+    brand_name: string
+    /** Same as `brand_name`; the field the server reads into `entered_brand`. */
     brand: string
     description: string
     category_id: string
@@ -110,12 +128,23 @@ export type SubmissionPayload = {
       }
     }>
   }>
-  /** Product-level attachments, as picked on the device. */
+  /**
+   * Product-level attachments. Each is uploaded to Cloudinary before the
+   * submission is sent, so the storage fields describe a file that already
+   * exists; `local_uri` stays as the record of where it came from.
+   */
   media: Array<{
     kind: string
     file_name: string
     mime_type: string
     /** Path to the file on this device. */
     local_uri: string
+    /** From POST /media/upload. Empty when the upload has not run. */
+    storage_key: string
+    public_url: string
+    file_size: number
+    width: number
+    height: number
+    content_hash: string
   }>
 }

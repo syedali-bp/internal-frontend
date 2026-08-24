@@ -6,7 +6,7 @@ import type {
   Variant,
 } from '../../types/product'
 import { serializeAttributes } from './attributeValues'
-import { serializeMedia, type MediaItem } from './media'
+import { serializeMedia, type MediaItem, type UploadedFields } from './media'
 
 /** Where and when the capture happened, as opposed to what was captured. */
 export type CaptureContext = {
@@ -16,6 +16,15 @@ export type CaptureContext = {
   barcode: string
   /** Category breadcrumb as picked in the app. */
   categoryPath: string
+  /**
+   * Display names for the manufacturer and brand the details hold ids for.
+   *
+   * Resolved by the screen from the lists the pick came from, for the same
+   * reason `categoryPath` is: the submission carries what was captured, not the
+   * reference data it was captured against. Blank when nothing was picked.
+   */
+  manufacturerName: string
+  brandName: string
 }
 
 /**
@@ -31,6 +40,13 @@ function captureAttributes(details: ProductDetails): Record<string, unknown> {
   if (modelNumber) extra.model_number = modelNumber
   if (details.tags.length) extra.tags = details.tags
   if (details.countryOfOrigin) extra.country_of_origin = details.countryOfOrigin
+
+  // catalog_submissions records the brand as free text (`entered_brand`) to be
+  // matched at review, so it has no column for a resolved id. The app now knows
+  // the real ones, and they are worth strictly more than the name — so they ride
+  // here, the same way model_number and tags already do.
+  if (details.manufacturerId) extra.manufacturer_id = details.manufacturerId
+  if (details.brandId) extra.brand_id = details.brandId
 
   return extra
 }
@@ -79,6 +95,7 @@ export function buildSubmissionPayload(
   axes: readonly AttributeDefinition[],
   variants: readonly Variant[],
   media: readonly MediaItem[],
+  uploaded?: ReadonlyMap<string, UploadedFields>,
 ): SubmissionPayload {
   const attributes = serializeAttributes(productLevel, values)
 
@@ -96,7 +113,15 @@ export function buildSubmissionPayload(
     captured_at: new Date().toISOString(),
     product: {
       name: details.name.trim(),
-      brand: details.brand,
+      // Null rather than "" for an id nobody picked: an empty string would read
+      // as a real reference to nothing.
+      manufacturer_id: details.manufacturerId || null,
+      manufacturer_name: capture.manufacturerName,
+      brand_id: details.brandId || null,
+      brand_name: capture.brandName,
+      // What the server stores as `entered_brand`: the name as captured, which
+      // is what review matches against.
+      brand: capture.brandName,
       description: details.description.trim(),
       category_id: details.categoryId,
       vertical_id: details.verticalId,
@@ -110,7 +135,7 @@ export function buildSubmissionPayload(
       is_default: variant.isDefault,
       packaging_levels: serializePackaging(variant.packagingLevels),
     })),
-    media: serializeMedia(media),
+    media: serializeMedia(media, uploaded),
     notes: details.notes.trim(),
     observed_price: toNumber(details.observedPrice),
     currency: details.currency,

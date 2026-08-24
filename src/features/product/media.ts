@@ -55,12 +55,46 @@ export function fileNameFromUri(uri: string, fallback: string) {
   return segment && segment.length > 0 ? decodeURIComponent(segment) : fallback
 }
 
-/** The media rows as the submission carries them; `local_uri` is the device path. */
-export function serializeMedia(items: readonly MediaItem[]) {
+/**
+ * One file as picked on the device, plus what Cloudinary made of it.
+ *
+ * `uploaded` is filled in by the submit step; it is absent while the file is
+ * only on the device, which is what the server reads as upload_status pending.
+ */
+export type UploadedFields = {
+  storage_key: string
+  public_url: string
+  file_size: number
+  width: number
+  height: number
+  content_hash: string
+}
+
+const NOT_UPLOADED: UploadedFields = {
+  storage_key: '',
+  public_url: '',
+  file_size: 0,
+  width: 0,
+  height: 0,
+  content_hash: '',
+}
+
+/**
+ * The media rows as the submission carries them.
+ *
+ * `local_uri` is kept even once the file is in Cloudinary: it is the record of
+ * where the capture came from, and the only thing left to retry against if an
+ * upload has to be repeated.
+ */
+export function serializeMedia(
+  items: readonly MediaItem[],
+  uploaded?: ReadonlyMap<string, UploadedFields>,
+) {
   return items.map((item) => ({
     kind: item.kind,
     file_name: item.name,
     mime_type: item.mimeType,
     local_uri: item.uri,
+    ...(uploaded?.get(item.id) ?? NOT_UPLOADED),
   }))
 }

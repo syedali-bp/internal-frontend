@@ -1,14 +1,17 @@
 import { useMemo } from 'react'
-
-import { CATEGORIES_BY_VERTICAL } from '../../data/catalog'
 import { buildCategoryTree } from '../../lib/categoryTree'
+import * as api from '../../api/api'
+import type { Category } from '../../types/catalog'
+
+/** Shared empty list, so an unanswered query does not rebuild the tree per render. */
+const NO_CATEGORIES: Category[] = []
 
 /** The category tree for one vertical; empty until a vertical is chosen. */
 export function useCategories(verticalId: string) {
-  const tree = useMemo(
-    () => buildCategoryTree(verticalId ? (CATEGORIES_BY_VERTICAL[verticalId] ?? []) : []),
-    [verticalId],
-  )
+  const query = api.useCategories(verticalId)
+  const categories: Category[] = query.data ?? NO_CATEGORIES
 
-  return { tree }
+  const tree = useMemo(() => buildCategoryTree(verticalId ? categories : []), [verticalId, categories])
+
+  return { tree, isLoading: query.isLoading, error: query.error }
 }

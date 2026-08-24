@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 
@@ -14,11 +15,21 @@ type Route =
 
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'scan' })
+  // Reference-data failures have to surface quickly. The default three retries
+  // with backoff, on top of each request's own 8s deadline, would leave the form
+  // in a loading state for well over half a minute before saying anything.
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { retry: 1 } },
+      }),
+  )
 
   return (
-    <SafeAreaProvider>
-      <StatusBar style="light" />
-      {route.name === 'scan' ? (
+    <QueryClientProvider client={queryClient}>
+      <SafeAreaProvider>
+        <StatusBar style="light" />
+        {route.name === 'scan' ? (
         <ScanQrScreen
           onScanned={(barcode) => setRoute({ name: 'add', barcode })}
           onAddProductDetails={() => setRoute({ name: 'add' })}
@@ -39,5 +50,6 @@ export default function App() {
         />
       )}
     </SafeAreaProvider>
+    </QueryClientProvider>
   )
 }

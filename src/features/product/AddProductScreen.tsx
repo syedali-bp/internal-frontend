@@ -10,21 +10,25 @@ import {
   TagInput,
 } from '../../components'
 import { COUNTRIES } from '../../constants/countries'
-import { BRANDS, CURRENCY_OPTIONS, UOM_OPTIONS } from '../../constants/options'
+import { CURRENCY_OPTIONS, UOM_OPTIONS } from '../../constants/options'
+import * as api from '../../api/api'
 import { formatCategoryPath } from '../../lib/categoryTree'
 import { colors } from '../../theme/colors'
 import { controls, forms } from '../../theme/styles'
 import type { SubmissionPayload } from '../../types/product'
+import { AddBrandModal, type NewBrand } from './components/AddBrandModal'
+import { AddManufacturerModal, type NewManufacturer } from './components/AddManufacturerModal'
 import { AttributesSection } from './components/AttributesSection'
 import { ErrorList } from './components/ErrorList'
 import { MediaSection } from './components/MediaSection'
-import { PackagingForm, createEmptyPackaging } from './components/PackagingForm'
 import { PayloadPreview } from './components/PayloadPreview'
 import { SavedVariantRow } from './components/SavedVariantRow'
 import { ScreenHeader } from './components/ScreenHeader'
 import { VariantForm } from './components/VariantForm'
 import { verticalUsesModelNumber } from './modelNumber'
+import { useBrands } from './useBrands'
 import { useCategories } from './useCategories'
+import { useManufacturers } from './useManufacturers'
 import { useProductCapture } from './useProductCapture'
 import { useVerticals } from './useVerticals'
 
@@ -53,14 +57,32 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
     variantList,
     errors,
     payload,
+    submitting,
     submit,
   } = useProductCapture(barcode ?? '')
 
-  const { verticals } = useVerticals()
+  const { verticals, isLoading: verticalsLoading, error: verticalsError } = useVerticals()
   const { tree: categoryTree } = useCategories(details.verticalId)
 
-  const [packagingOpenFor, setPackagingOpenFor] = useState<string | null>(null)
-  const [packagingDraft, setPackagingDraft] = useState(createEmptyPackaging)
+  const {
+    manufacturers,
+    isLoading: manufacturersLoading,
+    refetch: refetchManufacturers,
+  } = useManufacturers()
+
+  // Keyed on the manufacturer, so picking one narrows the list to its brands and
+  // clearing it widens the list back to every brand.
+  const {
+    brands,
+    isLoading: brandsLoading,
+    refetch: refetchBrands,
+  } = useBrands(details.manufacturerId)
+
+  const createManufacturer = api.useCreateManufacturer()
+  const createBrand = api.useCreateBrand()
+
+  const [manufacturerModalOpen, setManufacturerModalOpen] = useState(false)
+  const [brandModalOpen, setBrandModalOpen] = useState(false)
 
   const {
     variants,
@@ -72,7 +94,6 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
     editVariant,
     removeVariant,
     resetForm,
-    addPackaging,
   } = variantList
 
   useEffect(() => {
@@ -83,7 +104,7 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
 
   // A model number is only meaningful on some verticals, so the field appears
   // for those and stays out of the way everywhere else.
-  const selectedVertical = verticals.find((vertical) => vertical.id === details.verticalId)
+  const selectedVertical = verticals.find((vertical: any) => vertical.id === details.verticalId)
   const showModelNumber = verticalUsesModelNumber(selectedVertical)
 
   // Categories belong to a vertical, so switching verticals invalidates the pick.
@@ -93,32 +114,72 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
 
     // Drop anything typed under the previous vertical, so a hidden field can
     // never submit a leftover value.
-    const nextVertical = verticals.find((vertical) => vertical.id === verticalId)
+    const nextVertical = verticals.find((vertical: any) => vertical.id === verticalId)
     if (!verticalUsesModelNumber(nextVertical)) setDetail('modelNumber', '')
   }
 
-  const openPackaging = (variantId: string) => {
-    setPackagingOpenFor(variantId)
-    setPackagingDraft(createEmptyPackaging())
+  /**
+   * Files a new manufacturer and selects it.
+   *
+   * Selecting it is the point — the collector opened the popup because the one
+   * they need is missing, so leaving them to find it in the list afterwards
+   * would be busywork. The brand is cleared for the same reason changing the
+   * manufacturer clears it: the brand list is about to be a different list.
+   */
+  const handleCreateManufacturer = (body: NewManufacturer) => {
+    createManufacturer.mutate(body, {
+      onSuccess: (created: any) => {
+        refetchManufacturers()
+        setDetail('manufacturerId', created?.id ?? '')
+        setDetail('brandId', '')
+        setManufacturerModalOpen(false)
+      },
+    })
   }
 
-  const savePackaging = () => {
-    if (!packagingOpenFor || !packagingDraft.level) return
-
-    addPackaging(packagingOpenFor, packagingDraft)
-    setPackagingDraft(createEmptyPackaging())
-    setPackagingOpenFor(null)
+  const handleCreateBrand = (body: NewBrand) => {
+    createBrand.mutate(body, {
+      onSuccess: (created: any) => {
+        refetchBrands()
+        setDetail('brandId', created?.id ?? '')
+        // A brand created against a maker implies that maker, so the form catches
+        // up rather than leaving the two fields disagreeing.
+        if (body.manufacturer_id) setDetail('manufacturerId', body.manufacturer_id)
+        setBrandModalOpen(false)
+      },
+    })
   }
 
-  const handleSubmit = () => {
-    // The breadcrumb is resolved here, from the tree the pick came from — the
-    // submission carries the path, not the tree.
-    const result = submit(formatCategoryPath(categoryTree, details.categoryId))
+  /**
+   * A different manufacturer means a different brand list, and the brand already
+   * picked is almost certainly not on it. Clearing the manufacturer only widens
+   * the list, so the brand survives that direction.
+   */
+  const handleManufacturerChange = (manufacturerId: string) => {
+    setDetail('manufacturerId', manufacturerId)
+    if (manufacturerId) setDetail('brandId', '')
+  }
+
+  const handleSubmit = async () => {
+    // The breadcrumb and the two names are resolved here, from the lists the
+    // picks came from — the submission carries the labels, not the lists.
+    const result = await submit({
+      categoryPath: formatCategoryPath(categoryTree, details.categoryId),
+      manufacturerName: selectedManufacturer?.name ?? '',
+      brandName: selectedBrand?.name ?? '',
+    })
     // An invalid form keeps the screen up, with the errors above the button.
     if (!result) return
 
     onSubmitted(result)
   }
+
+  const selectedManufacturer = manufacturers.find((row) => row.id === details.manufacturerId)
+  const selectedBrand = brands.find((row) => row.id === details.brandId)
+
+  const verticalOptions = verticals.map((row) => ({ label: row.name, value: row.id }))
+  const manufacturerOptions = manufacturers.map((row) => ({ label: row.name, value: row.id }))
+  const brandOptions = brands.map((row) => ({ label: row.name, value: row.id }))
 
   const categoryPlaceholder = details.verticalId ? 'Select category' : 'Select a vertical first'
 
@@ -159,13 +220,29 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
           </View>
         )}
 
+        {/* Reference data is the whole form: with no verticals there is no
+            category, so no attributes and no axes. An empty dropdown looks like
+            an empty catalog, so a failure to reach the server says so instead. */}
+        {!!verticalsError && (
+          <View style={s.loadError}>
+            <Text style={s.loadErrorTitle}>Could not load the catalog</Text>
+            <Text style={s.loadErrorText}>{verticalsError.message}</Text>
+          </View>
+        )}
+
         {/* ---------------- Where it belongs ---------------- */}
         <Text style={forms.label}>Product Vertical:</Text>
         <Dropdown
           value={details.verticalId}
-          options={verticals.map((vertical) => ({ label: vertical.name, value: vertical.id }))}
+          options={verticalOptions}
           onChange={handleVerticalChange}
-          placeholder="Select vertical"
+          placeholder={
+            verticalsLoading
+              ? 'Loading verticals...'
+              : verticals.length === 0
+                ? 'No verticals available'
+                : 'Select vertical'
+          }
         />
 
         <Text style={forms.label}>Category:</Text>
@@ -202,13 +279,57 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
           </>
         )}
 
+        {/* Pick one, or add it on the spot when the catalog has never heard of
+            it — a collector at the shelf is usually the first to see it. */}
+        <Text style={forms.label}>Manufacturer:</Text>
+        <View style={s.selectRow}>
+          <View style={s.selectGrow}>
+            <Dropdown
+              value={details.manufacturerId}
+              options={manufacturerOptions}
+              onChange={handleManufacturerChange}
+              placeholder={
+                manufacturersLoading ? 'Loading...' : 'Select manufacturer (optional)'
+              }
+            />
+          </View>
+          <Pressable style={s.addSmall} onPress={() => setManufacturerModalOpen(true)}>
+            <Text style={s.addSmallText}>+ Add</Text>
+          </Pressable>
+        </View>
+        {!!details.manufacturerId && (
+          <Pressable onPress={() => handleManufacturerChange('')} hitSlop={8}>
+            <Text style={s.clearLink}>Clear manufacturer — show every brand</Text>
+          </Pressable>
+        )}
+
         <Text style={forms.label}>Brand:</Text>
-        <Dropdown
-          value={details.brand}
-          options={BRANDS}
-          onChange={(value) => setDetail('brand', value)}
-          placeholder="Select brand"
-        />
+        <View style={s.selectRow}>
+          <View style={s.selectGrow}>
+            <Dropdown
+              value={details.brandId}
+              options={brandOptions}
+              onChange={(value) => setDetail('brandId', value)}
+              placeholder={
+                brandsLoading
+                  ? 'Loading...'
+                  : brands.length === 0
+                    ? details.manufacturerId
+                      ? 'No brands for this manufacturer yet'
+                      : 'No brands yet — press Add'
+                    : 'Select brand (optional)'
+              }
+            />
+          </View>
+          <Pressable style={s.addSmall} onPress={() => setBrandModalOpen(true)}>
+            <Text style={s.addSmallText}>+ Add</Text>
+          </Pressable>
+        </View>
+        <Text style={s.fieldHint}>
+          {details.manufacturerId
+            ? `Showing ${selectedManufacturer?.name ?? 'this manufacturer'}'s brands only.`
+            : 'A brand does not need a manufacturer — either can be left blank.'}
+        </Text>
 
         <Text style={forms.label}>Description:</Text>
         <TextInput
@@ -322,19 +443,9 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
                   isEditing={editingId === variant.id}
                   onEdit={() => editVariant(variant.id)}
                   onDelete={() => removeVariant(variant.id)}
-                  onAddPackaging={() => openPackaging(variant.id)}
                   packagingLevels={variant.packagingLevels ?? []}
                 />
               ))
-            )}
-
-            {packagingOpenFor && (
-              <PackagingForm
-                value={packagingDraft}
-                onChange={setPackagingDraft}
-                onSubmit={savePackaging}
-                onCancel={() => setPackagingOpenFor(null)}
-              />
             )}
 
             <VariantForm
@@ -352,12 +463,38 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
         {/* ---------------- Validation ---------------- */}
         <ErrorList errors={errors} />
 
-        <Pressable style={s.submit} onPress={handleSubmit}>
-          <Text style={s.submitText}>ADD PRODUCT</Text>
+        <Pressable
+          style={[s.submit, submitting && s.submitBusy]}
+          onPress={handleSubmit}
+          disabled={submitting}
+        >
+          <Text style={s.submitText}>
+            {submitting ? 'UPLOADING & FILING...' : 'ADD PRODUCT'}
+          </Text>
         </Pressable>
 
         {payload && <PayloadPreview json={payload} />}
       </ScrollView>
+
+      <AddManufacturerModal
+        visible={manufacturerModalOpen}
+        onCancel={() => setManufacturerModalOpen(false)}
+        onSubmit={handleCreateManufacturer}
+        saving={createManufacturer.isPending}
+        error={createManufacturer.error?.message ?? null}
+      />
+
+      <AddBrandModal
+        visible={brandModalOpen}
+        onCancel={() => setBrandModalOpen(false)}
+        onSubmit={handleCreateBrand}
+        saving={createBrand.isPending}
+        error={createBrand.error?.message ?? null}
+        verticals={verticals}
+        currentVerticalCode={selectedVertical?.code ?? ''}
+        manufacturerOptions={manufacturerOptions}
+        currentManufacturerId={details.manufacturerId}
+      />
     </SafeAreaView>
   )
 }
@@ -389,6 +526,31 @@ const s = StyleSheet.create({
   note: { fontSize: 13, color: colors.textMuted, marginBottom: 10, lineHeight: 19 },
   empty: { fontSize: 13, color: colors.textMuted, fontStyle: 'italic', marginBottom: 10 },
 
+  loadError: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerBg,
+    borderRadius: 8,
+    padding: 12,
+  },
+  loadErrorTitle: { fontSize: 13, fontWeight: '800', color: colors.dangerText },
+  loadErrorText: { fontSize: 12, color: colors.dangerText, marginTop: 4, lineHeight: 17 },
+
+  selectRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  selectGrow: { flex: 1 },
+  addSmall: {
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primaryBg,
+    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  addSmallText: { color: colors.primary, fontWeight: '800', fontSize: 13 },
+  clearLink: { fontSize: 12, fontWeight: '700', color: colors.primary, marginTop: 7 },
+  fieldHint: { fontSize: 11, color: colors.textMuted, marginTop: 6 },
+
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   priceInput: { flex: 1 },
   currencyBox: { width: 116 },
@@ -400,5 +562,6 @@ const s = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
+  submitBusy: { opacity: 0.6 },
   submitText: { color: colors.onAccent, fontWeight: '800', fontSize: 15, letterSpacing: 0.5 },
 })

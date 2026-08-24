@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View, Image } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { colors } from '../../theme/colors'
@@ -55,10 +55,18 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
           <Text style={s.empty}>Nothing captured yet.</Text>
         )}
 
-        {submissions.map(({ id, payload }) => (
-          <View key={id} style={[s.card, id === justCapturedId && s.cardJustSent]}>
+        {submissions.map(({ id, payload, status, submissionId, error }) => (
+          <Pressable
+            key={id}
+            style={[s.card, id === justCapturedId && s.cardJustSent]}
+            onPress={() => console.log('open submission', id)}
+          >
             <View style={s.cardTop}>
-              <Text style={s.status}>CAPTURED</Text>
+              {/* Draft is what an accepted capture is to a collector: filed with
+                  the server, not yet judged by a moderator. */}
+              <Text style={status === 'failed' ? s.statusFailed : s.status}>
+                {status === 'failed' ? 'NOT SENT' : 'DRAFT'}
+              </Text>
               {id === justCapturedId ? (
                 <Text style={s.statusPill}>Just submitted</Text>
               ) : (
@@ -68,11 +76,15 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
               )}
             </View>
 
+            {status === 'failed' && !!error && <Text style={s.errorLine}>{error}</Text>}
+
             <Text style={s.title}>{payload.product.name}</Text>
             <Text style={s.meta}>
-              {payload.product.brand || 'No brand'} · {payload.category_path || 'Uncategorised'}
+              {/* The name, not the id — the id used to be what showed here. */}
+              {payload.product.brand_name || 'No brand'} ·{' '}
+              {payload.category_path || 'Uncategorised'}
             </Text>
-            <Text style={s.desc}>{payload.product.description || 'No description added.'}</Text>
+            <Text style={s.desc} numberOfLines={2}>{payload.product.description || 'No description added.'}</Text>
 
             <View style={s.factRow}>
               <Text style={s.fact}>{payload.scanned_barcode || 'No barcode'}</Text>
@@ -87,28 +99,48 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
                 {payload.variants.length} variants · {payload.media.length} media
               </Text>
               <Text style={s.timestamp}>{formatCapturedAt(payload.captured_at)}</Text>
+              {/* Do not display raw ids in the UI */}
             </View>
 
             {!!payload.media.length && (
               <View style={s.section}>
                 <Text style={s.sectionTitle}>Media</Text>
-                {payload.media.map((media) => (
-                  <View key={media.local_uri} style={s.mediaRow}>
-                    <Text style={s.mediaKind}>{media.kind}</Text>
-                    <Text style={s.mediaName}>{media.file_name || 'Unnamed file'}</Text>
-                    <Text style={s.mediaStatus}>{media.mime_type}</Text>
-                  </View>
-                ))}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.mediaScroll}>
+                  {payload.media.map((media) => (
+                    <View key={media.local_uri} style={s.thumbWrap}>
+                      <Image
+                        source={{ uri: media.public_url || media.local_uri }}
+                        style={s.thumb}
+                        resizeMode="cover"
+                      />
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {!!payload.variants.length && (
+              <View style={s.section}>
+                <Text style={s.sectionTitle}>Variants</Text>
+                <View style={s.variantsRow}>
+                  {payload.variants.map((v, idx) => (
+                    <View key={idx} style={s.variantChip}>
+                      <Text style={s.variantText} numberOfLines={1}>
+                        {v.sku || Object.keys(v.axes).map(k => `${k}:${v.axes[k]}`).join(', ')}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
               </View>
             )}
 
             {!!payload.notes && (
               <View style={s.section}>
                 <Text style={s.sectionTitle}>Notes</Text>
-                <Text style={s.desc}>{payload.notes}</Text>
+                <Text style={s.desc} numberOfLines={3}>{payload.notes}</Text>
               </View>
             )}
-          </View>
+          </Pressable>
         ))}
 
       </ScrollView>
@@ -155,6 +187,9 @@ const s = StyleSheet.create({
   cardJustSent: { borderColor: colors.primaryBorder, backgroundColor: colors.primaryBg },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   status: { color: colors.primary, fontWeight: '800', letterSpacing: 0.5 },
+  statusFailed: { color: colors.dangerText, fontWeight: '800', letterSpacing: 0.5 },
+  errorLine: { fontSize: 12, color: colors.dangerText, marginTop: 6, lineHeight: 17 },
+  submissionId: { fontSize: 10, color: colors.textMuted, marginTop: 4 },
   statusPill: {
     color: colors.onAccent,
     backgroundColor: colors.primary,
@@ -197,6 +232,22 @@ const s = StyleSheet.create({
   sectionTitle: { color: colors.text, fontSize: 14, fontWeight: '800', marginBottom: 8 },
   countLine: { color: colors.textSubtle, fontSize: 13 },
   timestamp: { color: colors.textMuted, fontSize: 12, marginTop: 4 },
+
+  mediaScroll: { marginTop: 6 },
+  thumbWrap: { width: 120, height: 80, marginRight: 8, borderRadius: 8, overflow: 'hidden' },
+  thumb: { width: '100%', height: '100%' },
+
+  variantsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  variantChip: {
+    backgroundColor: colors.headerBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: 8,
+  },
+  variantText: { color: colors.text, fontSize: 12, maxWidth: 140 },
 
   mediaRow: {
     padding: 10,

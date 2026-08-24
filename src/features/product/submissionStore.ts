@@ -9,10 +9,24 @@ import type { SubmissionPayload } from '../../types/product'
  * closed.
  */
 
+/**
+ * How far a capture has got.
+ *
+ * `draft` is a capture the server has accepted and no moderator has looked at
+ * yet — which is what the review queue holds as `pending`. The app says draft
+ * because that is what it means to the collector: filed, not yet judged.
+ */
+export type CaptureStatus = 'draft' | 'failed'
+
 export type CapturedSubmission = {
   /** The capture's own id — the same `client_id` the payload carries. */
   id: string
   payload: SubmissionPayload
+  status: CaptureStatus
+  /** The server's id for it, once it has one. */
+  submissionId?: string
+  /** Why it did not reach the server, when it did not. */
+  error?: string
 }
 
 let submissions: CapturedSubmission[] = []
@@ -24,8 +38,18 @@ function emit() {
 }
 
 /** Files one capture. A repeated `client_id` replaces the earlier attempt. */
-export function addSubmission(payload: SubmissionPayload): CapturedSubmission {
-  const entry: CapturedSubmission = { id: payload.client_id, payload }
+export function addSubmission(
+  payload: SubmissionPayload,
+  status: CaptureStatus,
+  extra?: { submissionId?: string; error?: string },
+): CapturedSubmission {
+  const entry: CapturedSubmission = {
+    id: payload.client_id,
+    payload,
+    status,
+    submissionId: extra?.submissionId,
+    error: extra?.error,
+  }
 
   submissions = [entry, ...submissions.filter((existing) => existing.id !== entry.id)]
   emit()

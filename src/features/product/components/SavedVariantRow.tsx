@@ -11,7 +11,6 @@ type SavedVariantRowProps = {
   isEditing: boolean
   onEdit: () => void
   onDelete: () => void
-  onAddPackaging: () => void
   packagingLevels: readonly PackagingLevelDraft[]
 }
 
@@ -36,7 +35,6 @@ export function SavedVariantRow({
   isEditing,
   onEdit,
   onDelete,
-  onAddPackaging,
   packagingLevels,
 }: SavedVariantRowProps) {
   const rows = packagingLevels ?? []
@@ -65,16 +63,9 @@ export function SavedVariantRow({
       <Text style={s.axes}>{describeAxes(variant, axes)}</Text>
       <Text style={s.sku}>SKU: {variant.sku || '—'}</Text>
 
-      <View style={s.packagingHead}>
-        <Text style={s.packagingTitle}>Packaging</Text>
-        <Pressable onPress={onAddPackaging} hitSlop={6}>
-          <Text style={s.addPackaging}>+ Add Packaging</Text>
-        </Pressable>
-      </View>
-
-      {rows.length === 0 ? (
-        <Text style={s.packagingEmpty}>No packaging added yet.</Text>
-      ) : (
+      {/* Packaging is no longer captured on the variant. Rows already captured
+          are still listed, so nothing recorded before disappears. */}
+      {rows.length === 0 ? null : (
         rows.map((packaging, index) => (
           <View key={`${variant.id}-pkg-${index}`} style={s.packagingItem}>
             <Text style={s.packagingLine}>
@@ -123,10 +114,6 @@ const s = StyleSheet.create({
   axes: { fontSize: 13, color: colors.text, marginTop: 8 },
   sku: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   editingNote: { fontSize: 11, color: colors.primary, marginTop: 8, fontWeight: '600' },
-  packagingHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
-  packagingTitle: { fontSize: 12, fontWeight: '800', color: colors.text },
-  addPackaging: { fontSize: 12, fontWeight: '800', color: colors.primary },
-  packagingEmpty: { fontSize: 12, color: colors.textMuted, marginTop: 6, fontStyle: 'italic' },
   packagingItem: {
     marginTop: 8,
     padding: 10,

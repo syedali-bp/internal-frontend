@@ -1,4 +1,4 @@
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Dropdown } from '../../../components'
 import { colors } from '../../../theme/colors'
@@ -39,14 +39,9 @@ export function MediaSection({
         <View style={s.list}>
           {items.map((item) => (
             <View key={item.id} style={s.row}>
-              <View style={s.thumb}>
-                {isDocumentKind(item.kind) ? (
-                  <Text style={s.thumbIcon}>PDF</Text>
-                ) : (
-                  <Image source={{ uri: item.uri }} style={s.thumbImage} resizeMode="cover" />
-                )}
-              </View>
-
+              {/* No image preview: the row states the kind and the file name
+                  instead. A photo just taken is not in doubt, and rendering it
+                  again only makes the list long enough to scroll past. */}
               <View style={s.rowText}>
                 <Text style={s.rowKind}>{item.kind}</Text>
                 <Text style={s.rowName} numberOfLines={1}>
@@ -103,20 +98,6 @@ const s = StyleSheet.create({
     padding: 8,
     marginBottom: 8,
   },
-  thumb: {
-    width: 44,
-    height: 44,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  thumbImage: { width: '100%', height: '100%' },
-  thumbIcon: { fontSize: 11, fontWeight: '800', color: colors.textMuted },
-
   rowText: { flex: 1 },
   rowKind: { fontSize: 12, fontWeight: '800', color: colors.primary },
   rowName: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
