@@ -4,6 +4,7 @@ import type { Palette } from '../../../theme/colors'
 import { useColors, useThemedStyles } from '../../../theme/useColors'
 import type { AttributeDefinition } from '../../../types/catalog'
 import type { PackagingLevelDraft, Variant } from '../../../types/product'
+import { mediaKindLabel, type MediaItem } from '../media'
 
 type SavedVariantRowProps = {
   variant: Variant
@@ -13,6 +14,16 @@ type SavedVariantRowProps = {
   onEdit: () => void
   onDelete: () => void
   packagingLevels: readonly PackagingLevelDraft[]
+  /**
+   * This variant's own photos — the files tagged with its id.
+   *
+   * Filtered by the caller, which holds the one shared list. Tagging is what
+   * actually travels to the server as `variant_client_id`; this is not merely a
+   * visual grouping.
+   */
+  media: readonly MediaItem[]
+  onAddMedia: () => void
+  onRemoveMedia: (id: string) => void
 }
 
 /** Renders the axis answers as "Flavour: Salted · Pack Size: 30 g". */
@@ -37,6 +48,9 @@ export function SavedVariantRow({
   onEdit,
   onDelete,
   packagingLevels,
+  media,
+  onAddMedia,
+  onRemoveMedia,
 }: SavedVariantRowProps) {
   const s = useThemedStyles(makeStyles)
   const rows = packagingLevels ?? []
@@ -87,6 +101,35 @@ export function SavedVariantRow({
         ))
       )}
 
+      {/* Photos of this pack specifically. Product-level media stays in its own
+          section above: a picture of one pack is not a picture of the product,
+          which is the distinction variant_client_id carries to the server. */}
+      <View style={s.media}>
+        <View style={s.mediaHead}>
+          <Text style={s.mediaTitle}>
+            Photos{media.length > 0 ? ` (${media.length})` : ''}
+          </Text>
+          <Pressable onPress={onAddMedia} hitSlop={6}>
+            <Text style={s.mediaAdd}>+ Add media</Text>
+          </Pressable>
+        </View>
+
+        {media.length === 0 ? (
+          <Text style={s.mediaEmpty}>No photos of this variant yet.</Text>
+        ) : (
+          media.map((item) => (
+            <View key={item.id} style={s.mediaItem}>
+              <Text style={s.mediaName} numberOfLines={1}>
+                {mediaKindLabel(item.kind)} · {item.name}
+              </Text>
+              <Pressable onPress={() => onRemoveMedia(item.id)} hitSlop={6}>
+                <Text style={s.delete}>Remove</Text>
+              </Pressable>
+            </View>
+          ))
+        )}
+      </View>
+
       {isEditing && <Text style={s.editingNote}>Editing in the form below</Text>}
     </View>
   )
@@ -95,6 +138,30 @@ export function SavedVariantRow({
 /** Built from the palette so the theme toggle repaints it. */
 const makeStyles = (colors: Palette) =>
   StyleSheet.create({
+  media: {
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 10,
+    paddingTop: 10,
+  },
+  mediaHead: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  mediaTitle: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  mediaAdd: { color: colors.primary, fontSize: 13, fontWeight: '800' },
+  mediaEmpty: { color: colors.textMuted, fontSize: 12, marginTop: 6 },
+  mediaItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  mediaName: { color: colors.textSubtle, flex: 1, fontSize: 12 },
   card: {
     borderWidth: 1,
     borderColor: colors.primaryBorder,

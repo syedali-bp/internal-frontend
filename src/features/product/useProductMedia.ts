@@ -1,6 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker'
 import * as ImagePicker from 'expo-image-picker'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Alert } from 'react-native'
 
 import type { MediaKind } from '../../types/catalog'
@@ -25,9 +25,23 @@ export function useProductMedia() {
   const [kind, setKind] = useState<MediaKind>(DEFAULT_MEDIA_KIND)
   const [error, setError] = useState<string | null>(null)
 
+  /**
+   * The variant the next file will be tagged with, or undefined for a
+   * product-level one.
+   *
+   * A ref rather than state: it is set the moment a variant's "Add media" is
+   * pressed and read when the picker returns, and re-rendering the form between
+   * those two points would serve no purpose. State would also risk the picker's
+   * callback closing over a stale value.
+   */
+  const pendingVariantId = useRef<string | undefined>(undefined)
+
   const append = useCallback(
     (item: Omit<MediaItem, 'id'>) => {
-      setItems((prev) => [...prev, { ...item, id: String(nextMediaId++) }])
+      setItems((prev) => [
+        ...prev,
+        { ...item, id: String(nextMediaId++), variantId: pendingVariantId.current },
+      ])
       setError(null)
     },
     [],
@@ -101,8 +115,12 @@ export function useProductMedia() {
    * The single "Add media" entry point. Documents go straight to the file
    * picker; photos ask where the image should come from.
    */
-  const addMedia = useCallback(() => {
+  const addMedia = useCallback((variantId?: string) => {
     setError(null)
+    // Tagged here rather than passed through every picker path: both the camera
+    // and the document flows land in `append`, which is the one place that
+    // builds the item.
+    pendingVariantId.current = variantId
 
     if (isDocumentKind(kind)) {
       addDocument()

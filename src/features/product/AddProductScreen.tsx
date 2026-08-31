@@ -131,6 +131,17 @@ export function AddProductScreen({ barcode, contributing, onBack, onSubmitted }:
   )
 
   /**
+   * Attachments that describe the product rather than one of its packs.
+   *
+   * The list is shared so uploading and submitting stay one path; the split is
+   * by `variantId`, exactly as the server splits them on arrival.
+   */
+  const productLevelMedia = useMemo(
+    () => mediaList.items.filter((item) => !item.variantId),
+    [mediaList.items],
+  )
+
+  /**
    * Whether a field is already on file and so must not be edited here.
    *
    * Driven by the server's `missing` list rather than by checking the value:
@@ -556,18 +567,6 @@ export function AddProductScreen({ barcode, contributing, onBack, onSubmitted }:
           />
         )}
 
-        {/* ------------- Photos and documents ------------- */}
-        <SectionHeader text="MEDIA" color={colors.primary} />
-
-        <MediaSection
-          items={mediaList.items}
-          kind={mediaList.kind}
-          onKindChange={mediaList.setKind}
-          onAdd={mediaList.addMedia}
-          onRemove={mediaList.removeMedia}
-          error={mediaList.error}
-        />
-
         {/* ------------- Variants, built from the axes ------------- */}
         <SectionHeader text="VARIANTS" color={colors.text} />
 
@@ -591,7 +590,13 @@ export function AddProductScreen({ barcode, contributing, onBack, onSubmitted }:
             </Text>
 
             {variants.length === 0 ? (
-              <Text style={s.empty}>No variants added yet. Fill the form below and press Add.</Text>
+              // Says where photos live, because this is the state a collector
+              // meets first and the per-variant Add media only appears once a
+              // variant exists — which read as "media is still outside".
+              <Text style={s.empty}>
+                No variants added yet. Fill the form below and press Add — each variant gets its
+                own Add media once saved.
+              </Text>
             ) : (
               variants.map((variant, index) => (
                 <SavedVariantRow
@@ -603,6 +608,12 @@ export function AddProductScreen({ barcode, contributing, onBack, onSubmitted }:
                   onEdit={() => editVariant(variant.id)}
                   onDelete={() => removeVariant(variant.id)}
                   packagingLevels={variant.packagingLevels ?? []}
+                  // This variant's own photos, and an Add that tags what it
+                  // captures with the variant's id — which is what actually
+                  // reaches the server, not just a visual grouping.
+                  media={mediaList.items.filter((item) => item.variantId === variant.id)}
+                  onAddMedia={() => mediaList.addMedia(variant.id)}
+                  onRemoveMedia={mediaList.removeMedia}
                 />
               ))
             )}
@@ -618,6 +629,34 @@ export function AddProductScreen({ barcode, contributing, onBack, onSubmitted }:
             />
           </>
         )}
+
+        {/* ------------- Product-level media -------------
+            Deliberately after the variants, and deliberately still here.
+
+            Photos of a pack belong to the pack, and each variant carries its own
+            Add media for them — so this section is no longer where a collector
+            adds a product photo by default. It comes last because it is the
+            rarer case: a shelf shot or a manual, which describe the product
+            rather than any one version of it.
+
+            Not removed, because a product thumbnail can only come from a
+            product-level asset. Take this away and every product in every
+            listing falls back to showing one of its packs. */}
+        <SectionHeader text="PRODUCT MEDIA" color={colors.primary} />
+
+        <Text style={s.note}>
+          Optional, and only for the product as a whole — a shelf photo or a
+          manual. Photos of a particular pack go on that variant above.
+        </Text>
+
+        <MediaSection
+          items={productLevelMedia}
+          kind={mediaList.kind}
+          onKindChange={mediaList.setKind}
+          onAdd={() => mediaList.addMedia()}
+          onRemove={mediaList.removeMedia}
+          error={mediaList.error}
+        />
 
         {/* ---------------- Validation ---------------- */}
         <ErrorList errors={errors} />

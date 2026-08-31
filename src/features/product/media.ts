@@ -7,6 +7,18 @@ import type { MediaKind } from '../../types/catalog'
 export type MediaItem = {
   /** Id for this list only, assigned when the file is added. */
   id: string
+  /**
+   * The variant this file is of, by that variant's device-local id.
+   *
+   * Undefined means it describes the product as a whole — a shelf shot, a
+   * manual — rather than one pack. The server treats absence the same way, so a
+   * file captured outside any variant section stays product-level, which is what
+   * keeps a product thumbnail possible.
+   *
+   * The variant's own `id` is used rather than a server id because the variant
+   * does not exist server-side until review merges the capture.
+   */
+  variantId?: string
   kind: MediaKind
   uri: string
   name: string
@@ -92,6 +104,9 @@ export function serializeMedia(
 ) {
   return items.map((item) => ({
     kind: item.kind,
+    // Omitted rather than sent empty when the file is product-level: the server
+    // distinguishes "named no variant" from "named an empty one".
+    ...(item.variantId ? { variant_client_id: item.variantId } : {}),
     file_name: item.name,
     mime_type: item.mimeType,
     local_uri: item.uri,

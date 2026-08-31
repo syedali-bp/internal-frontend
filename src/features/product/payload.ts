@@ -139,6 +139,10 @@ export function buildSubmissionPayload(
       attributes,
     },
     variants: variants.map((variant) => ({
+      // The device's own id for this variant, so media captured against it can
+      // name it. The server has no variant row to point at until review merges
+      // the capture, which is why the association travels as a client id.
+      client_id: variant.id,
       // Axis answers go through the same typing rules as product attributes.
       axes: serializeAttributes(axes, variant.axes),
       sku: variant.sku.trim(),
