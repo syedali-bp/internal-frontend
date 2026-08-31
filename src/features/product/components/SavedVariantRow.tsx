@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { colors } from '../../../theme/colors'
+import type { Palette } from '../../../theme/colors'
+import { useColors, useThemedStyles } from '../../../theme/useColors'
 import type { AttributeDefinition } from '../../../types/catalog'
 import type { PackagingLevelDraft, Variant } from '../../../types/product'
 
@@ -37,6 +38,7 @@ export function SavedVariantRow({
   onDelete,
   packagingLevels,
 }: SavedVariantRowProps) {
+  const s = useThemedStyles(makeStyles)
   const rows = packagingLevels ?? []
 
   return (
@@ -90,7 +92,9 @@ export function SavedVariantRow({
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   card: {
     borderWidth: 1,
     borderColor: colors.primaryBorder,
@@ -126,3 +130,4 @@ const s = StyleSheet.create({
   packagingDesc: { fontSize: 12, color: colors.textSubtle, marginTop: 2 },
   packagingMeta: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
 })
+

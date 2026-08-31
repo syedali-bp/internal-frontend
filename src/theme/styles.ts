@@ -2,8 +2,17 @@ import { StyleSheet } from 'react-native'
 
 import { colors } from './colors'
 
-// Shared control styles. The dropdown trigger and the text inputs have to look
-// identical, so the box style lives in one place instead of being copied.
+/**
+ * Shared control styles, baked with the dark palette.
+ *
+ * Superseded by `makeControls` / `makeForms` in useColors.ts, which build the
+ * same shapes from the active theme. Nothing imports these any more; they are
+ * kept as the reference the themed factories mirror, and are safe to delete
+ * once that no longer has value.
+ *
+ * Do not add consumers: a `StyleSheet.create` at module scope evaluates once at
+ * import, so anything reading from here is frozen dark whatever the toggle says.
+ */
 export const controls = StyleSheet.create({
   input: {
     borderWidth: 1,

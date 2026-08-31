@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text } from 'react-native'
 
-import { colors } from '../theme/colors'
+import type { Palette } from '../theme/colors'
+import { useColors, useThemedStyles } from '../theme/useColors'
 
 type CheckboxProps = {
   checked: boolean
@@ -8,6 +9,7 @@ type CheckboxProps = {
 }
 
 export function Checkbox({ checked, onToggle }: CheckboxProps) {
+  const s = useThemedStyles(makeStyles)
   return (
     <Pressable
       onPress={onToggle}
@@ -21,7 +23,9 @@ export function Checkbox({ checked, onToggle }: CheckboxProps) {
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   box: {
     width: 26,
     height: 26,
@@ -35,3 +39,4 @@ const s = StyleSheet.create({
   boxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   tick: { color: colors.onAccent, fontSize: 15, fontWeight: '800' },
 })
+

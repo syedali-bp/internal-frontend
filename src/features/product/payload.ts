@@ -12,6 +12,15 @@ import { serializeMedia, type MediaItem, type UploadedFields } from './media'
 export type CaptureContext = {
   /** Device-generated id for this capture; the same one across retries. */
   clientId: string
+  /**
+   * The open visit's session id, from `sessionStore`.
+   *
+   * Carried on the capture rather than read at send time on purpose: a queued
+   * capture belongs to the visit it was made on, and syncing it later — after
+   * the collector has moved to the next shop — must not re-attribute it to
+   * whichever session happens to be open then.
+   */
+  sessionId: string
   /** Raw scan value, empty when the product was added without scanning. */
   barcode: string
   /** Category breadcrumb as picked in the app. */
@@ -108,6 +117,7 @@ export function buildSubmissionPayload(
 
   return {
     client_id: capture.clientId,
+    session_id: capture.sessionId,
     scanned_barcode: capture.barcode,
     category_path: capture.categoryPath,
     captured_at: new Date().toISOString(),

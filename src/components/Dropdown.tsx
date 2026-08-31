@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-import { colors } from '../theme/colors'
-import { controls } from '../theme/styles'
+import type { Palette } from '../theme/colors'
+import { makeControls, useColors, useThemedStyles } from '../theme/useColors'
 
 export type DropdownOption = {
   label: string
@@ -22,6 +22,8 @@ type DropdownProps = {
  * pulling in another native dependency.
  */
 export function Dropdown({ value, options, onChange, placeholder, disabled = false }: DropdownProps) {
+  const controls = useThemedStyles(makeControls)
+  const s = useThemedStyles(makeStyles)
   const [open, setOpen] = useState(false)
   const normalizedOptions = options.map((option) =>
     typeof option === 'string' ? { label: option, value: option } : option,
@@ -65,7 +67,9 @@ export function Dropdown({ value, options, onChange, placeholder, disabled = fal
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   valueText: { fontSize: 14, color: colors.text, flex: 1 },
   placeholder: { fontSize: 14, color: colors.placeholder, flex: 1 },
   caret: { fontSize: 16, color: colors.textMuted, marginTop: -6 },
@@ -83,3 +87,4 @@ const s = StyleSheet.create({
   optionActive: { backgroundColor: colors.primaryHighlight },
   optionText: { fontSize: 15, color: colors.text },
 })
+

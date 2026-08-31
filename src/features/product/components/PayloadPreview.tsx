@@ -1,8 +1,10 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import { colors } from '../../../theme/colors'
+import type { Palette } from '../../../theme/colors'
+import { useColors, useThemedStyles } from '../../../theme/useColors'
 
 export function PayloadPreview({ json }: { json: string }) {
+  const s = useThemedStyles(makeStyles)
   return (
     <View style={s.box}>
       <Text style={s.title}>Payload that would be sent</Text>
@@ -13,7 +15,9 @@ export function PayloadPreview({ json }: { json: string }) {
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   box: {
     marginTop: 18,
     borderWidth: 1,
@@ -30,3 +34,4 @@ const s = StyleSheet.create({
   },
   json: { color: colors.codeText, fontFamily: 'monospace', fontSize: 12, lineHeight: 18 },
 })
+

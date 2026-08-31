@@ -13,12 +13,31 @@ export function validateCapture(
   values: AttributeValues,
   axes: readonly AttributeDefinition[],
   variants: readonly Variant[],
+  /**
+   * True when this capture adds to a product the catalog already holds.
+   *
+   * A contribution is held to a different standard, because it is answering a
+   * different question. A new product has to arrive complete enough to become a
+   * catalog row — every required attribute, at least one variant, a default
+   * among them. A contribution is somebody standing at a shelf adding the photo
+   * that was missing: the product already exists, its variants already exist,
+   * and the fields it is missing are exactly the ones the server asked for.
+   *
+   * Demanding the full set here asked the collector to re-describe a pack the
+   * catalog had already described — from fields the screen locks against them,
+   * which made the form impossible to submit rather than merely tedious.
+   */
+  contributing = false,
 ): string[] {
   const errors: string[] = []
 
   if (!details.name.trim()) errors.push('Product name is required.')
   if (!details.verticalId) errors.push('Product vertical is required.')
   if (!details.categoryId) errors.push('Category is required.')
+
+  // Everything below describes a product being created. A contribution adds to
+  // one that already exists, so its variants and attributes are already on file.
+  if (contributing) return errors
 
   productLevel.forEach((definition) => {
     if (!definition.is_required) return

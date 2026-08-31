@@ -3,8 +3,8 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { Checkbox, Dropdown } from '../../../components'
 import type { DropdownOption } from '../../../components/Dropdown'
-import { colors } from '../../../theme/colors'
-import { controls } from '../../../theme/styles'
+import type { Palette } from '../../../theme/colors'
+import { makeControls, useColors, useThemedStyles } from '../../../theme/useColors'
 import type { AttributeDefinition, AttributeValue } from '../../../types/catalog'
 import { DIMENSION_LABELS } from '../attributeValues'
 
@@ -29,6 +29,9 @@ function asList(value: AttributeValue) {
  * means adding one branch here and nowhere else.
  */
 export function AttributeControl({ definition, value, onChange }: AttributeControlProps) {
+  const controls = useThemedStyles(makeControls)
+  const colors = useColors()
+  const s = useThemedStyles(makeStyles)
   const { data_type: dataType, unit, options } = definition
 
   // Units read best on the option itself for choices ("500 ml") and beside the
@@ -152,7 +155,9 @@ export function AttributeControl({ definition, value, onChange }: AttributeContr
   }
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   inline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   grow: { flex: 1 },
   dimensionInput: { flex: 1, textAlign: 'center' },
@@ -175,3 +180,4 @@ const s = StyleSheet.create({
   chipTextOn: { color: colors.primary, fontWeight: '700' },
   note: { fontSize: 13, color: colors.textMuted },
 })
+

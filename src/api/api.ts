@@ -3,6 +3,9 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 // upload needs here — see the note on uploadMedia.
 import { fetch as expoFetch } from 'expo/fetch'
 
+import { getAccessToken } from '../features/auth/authSession'
+import { setReachable } from '../features/product/connectivity'
+
 /**
  * Where the catalog backend lives, from `EXPO_PUBLIC_API_URL` in `.env`.
  *
@@ -29,7 +32,71 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || ''
  */
 const REQUEST_TIMEOUT_MS = 8000
 
-async function request<T>(url: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
+/**
+ * Options that are ours rather than fetch's.
+ *
+ * `unwrap: false` is for the auth endpoints: `/api/collect/login`, `/register`
+ * and `/refresh` answer with the session object at the top level, where the
+ * rest of the API nests its payload under `data`.
+ */
+type RequestOptions = {
+  unwrap?: boolean
+  /**
+   * Internal. Set when a call is already the retry after a token refresh, so a
+   * second 401 fails instead of refreshing again forever.
+   */
+  isRetry?: boolean
+  /**
+   * Set on the auth endpoints themselves. A 401 from `/refresh` means the
+   * refresh token is dead — there is nothing to recover with, and trying would
+   * re-enter the refresh that is already in flight and await itself. Deadlock.
+   */
+  noRefresh?: boolean
+}
+
+/**
+ * How a 401 gets a fresh token.
+ *
+ * A callback registered by the auth layer rather than a direct import: authApi
+ * imports this module, so importing it back would be a cycle. Returns true if a
+ * new access token is now in place and the caller should retry.
+ */
+type TokenRefresher = () => Promise<boolean>
+
+let refreshTokens: TokenRefresher | null = null
+
+/** Wired once, on launch, by the auth layer. */
+export function setTokenRefresher(refresher: TokenRefresher | null) {
+  refreshTokens = refresher
+}
+
+/**
+ * The refresh in flight, if any.
+ *
+ * Several requests can 401 at once — the capture screen loads categories,
+ * attributes and brands together — and each must not start its own refresh: the
+ * server rotates the refresh token, so the second call would present one the
+ * first has already spent and log the collector out. They all await this one
+ * promise instead.
+ */
+let refreshInFlight: Promise<boolean> | null = null
+
+function refreshOnce(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = (refreshTokens?.() ?? Promise.resolve(false)).finally(() => {
+      refreshInFlight = null
+    })
+  }
+
+  return refreshInFlight
+}
+
+async function request<T>(
+  url: string,
+  init?: RequestInit,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+  options: RequestOptions = {},
+): Promise<T> {
   if (!API_BASE_URL) {
     throw new Error(
       'EXPO_PUBLIC_API_URL is not set, so there is no server to call. ' +
@@ -45,16 +112,30 @@ async function request<T>(url: string, init?: RequestInit, timeoutMs = REQUEST_T
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
+  // Every authenticated call carries the collector's bearer token. Attached
+  // here rather than at each call site so a new endpoint cannot forget it —
+  // and skipped when absent, because login itself has no token yet.
+  const token = getAccessToken()
+  const headers = {
+    ...(init?.headers as Record<string, string> | undefined),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+
   let res: Response
   try {
     res = await fetch(target, {
       credentials: 'include',
       ...init,
+      headers,
       signal: controller.signal,
     })
   } catch (caught) {
     // Name the address that failed. "Network request failed" on its own gives
     // no way to tell a stopped server from the wrong host for this device.
+    // The request never got an answer, so the backend is not reachable from
+    // here. The offline queue watches this to know when to try again.
+    setReachable(false)
+
     const aborted = caught instanceof Error && caught.name === 'AbortError'
     throw new Error(
       `${aborted ? `No answer from ${target} within ${timeoutMs / 1000}s` : `Could not reach ${target}`}. ` +
@@ -66,17 +147,71 @@ async function request<T>(url: string, init?: RequestInit, timeoutMs = REQUEST_T
     clearTimeout(timer)
   }
 
+  // An answer of any status proves the host is up; a 4xx is the server
+  // disagreeing with the request, not the connection failing.
+  setReachable(true)
+
   if (!res.ok) {
     const text = await res.text()
+
+    // An expired access token is the one failure worth handling rather than
+    // reporting: refresh and replay the request once, so a collector who left
+    // the app open overnight does not get an error they can only fix by
+    // logging in again. Only once — `isRetry` stops a genuinely unauthorised
+    // call from looping.
+    if (res.status === 401 && !options.isRetry && !options.noRefresh && token && refreshTokens) {
+      const refreshed = await refreshOnce()
+      if (refreshed) {
+        return request<T>(url, init, timeoutMs, { ...options, isRetry: true })
+      }
+    }
+
     throw new Error(`Request failed ${res.status}: ${text}`)
   }
 
   const json = await res.json()
-  return json.data as T
+  return (options.unwrap === false ? json : json.data) as T
+}
+
+/**
+ * POST that returns the body as-is, for the auth endpoints whose response is
+ * not wrapped in `data`.
+ */
+export async function postJsonRaw<T = any>(url: string, body: unknown): Promise<T> {
+  return request<T>(
+    url,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json' },
+    },
+    REQUEST_TIMEOUT_MS,
+    // These are the auth endpoints. None of them can be rescued by a refresh,
+    // and `/refresh` refreshing itself would deadlock.
+    { unwrap: false, noRefresh: true },
+  )
 }
 
 export async function fetcher<T = any>(url: string): Promise<T> {
   return request<T>(url)
+}
+
+/** One-shot POST for callers that own their own mutation, e.g. store creation. */
+export async function postJson<T = any>(url: string, body: unknown): Promise<T> {
+  return request<T>(url, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+/** One-shot PATCH for the same callers, e.g. ending a collection session. */
+export async function patchJson<T = any>(url: string, body: unknown): Promise<T> {
+  return request<T>(url, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+  })
 }
 
 export const useGet = <T = any>(key: unknown[], url: string, options?: any) =>
@@ -95,7 +230,10 @@ export const useDelete = <T = any>(url: string) =>
   useMutation<T, Error, void>({ mutationFn: async () => request<T>(url, { method: 'DELETE' }) })
 
 // Catalog hooks
-export const useVerticals = () => useGet(['catalog', 'verticals'], '/api/catalog/verticals')
+// `options` is forwarded so a caller serving the list from fixtures can disable
+// the query outright rather than letting it fail against an absent backend.
+export const useVerticals = (options?: any) =>
+  useGet(['catalog', 'verticals'], '/api/catalog/verticals', options)
 
 export const useCategories = (verticalId?: string) => {
   const url = verticalId ? `/api/catalog/categories/${encodeURIComponent(verticalId)}` : '/api/catalog/categories'
@@ -172,10 +310,17 @@ export const uploadMedia = async (
     throw new Error('the picker returned no file path for this photo')
   }
 
-  const target = `${API_BASE_URL}/api/catalog/media/upload`
+  const target = `${API_BASE_URL}/api/collect/media/upload`
   const name = file.name || 'photo.jpg'
   const type = file.type || 'image/jpeg'
   const attempts: string[] = []
+
+  // These two attempts call fetch directly rather than going through
+  // `request`, so the bearer token it would have added has to be added here.
+  // Content-Type is left alone deliberately: the multipart boundary is
+  // generated by FormData, and setting the header by hand loses it.
+  const token = getAccessToken()
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : undefined
 
   // ---- (1) the documented path: real bytes, sent by expo/fetch ----
   try {
@@ -188,7 +333,10 @@ export const uploadMedia = async (
     form.append('file', blob, name)
     if (kind) form.append('kind', kind)
 
-    return await send(() => expoFetch(target, { method: 'POST', body: form }), target)
+    return await send(
+      () => expoFetch(target, { method: 'POST', body: form, headers: authHeaders }),
+      target,
+    )
   } catch (caught) {
     attempts.push(`blob upload: ${caught instanceof Error ? caught.message : String(caught)}`)
   }
@@ -199,7 +347,10 @@ export const uploadMedia = async (
     form.append('file', { uri: file.uri, name, type } as any)
     if (kind) form.append('kind', kind)
 
-    return await send(() => fetch(target, { method: 'POST', body: form }), target)
+    return await send(
+      () => fetch(target, { method: 'POST', body: form, headers: authHeaders }),
+      target,
+    )
   } catch (caught) {
     attempts.push(`uri upload: ${caught instanceof Error ? caught.message : String(caught)}`)
   }
@@ -245,7 +396,7 @@ async function send(attempt: () => Promise<Response>, target: string): Promise<U
 
 /** Files one capture. Retry-safe on `client_id`: the first write is the one kept. */
 export const submitProductSubmission = <T = any>(body: unknown): Promise<T> =>
-  request<T>('/api/catalog/product-submissions', {
+  request<T>('/api/collect/product-submissions', {
     method: 'POST',
     body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' },

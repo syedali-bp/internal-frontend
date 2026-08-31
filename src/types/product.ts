@@ -71,6 +71,15 @@ export type ProductDetails = {
 export type SubmissionPayload = {
   /** Device-generated id for the capture, stable across repeated submits. */
   client_id: string
+  /**
+   * Which visit this capture belongs to.
+   *
+   * Required by the server and rejected outright when absent: the collector is
+   * read from the access token, but one token spans many store visits, so the
+   * session is the only thing saying which shop this was captured in. It is
+   * what review and payroll count against.
+   */
+  session_id: string
   /** Raw scan value; empty when nothing was scanned. */
   scanned_barcode: string
   /** Category breadcrumb as picked in the app. */

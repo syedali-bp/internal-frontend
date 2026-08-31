@@ -1,11 +1,22 @@
-import { Pressable, ScrollView, StyleSheet, Text, View, Image } from 'react-native'
+import { useCallback, useState } from 'react'
+import {
+  Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { colors } from '../../theme/colors'
+import type { Palette } from '../../theme/colors'
+import { useColors, useThemedStyles } from '../../theme/useColors'
 import type { SubmissionPayload } from '../../types/product'
 import { ScreenHeader } from './components/ScreenHeader'
+import { SyncStatusBar } from './components/SyncStatusBar'
 import { removeSubmission } from './submissionStore'
-import { useProductSubmissions } from './useProductSubmissions'
+import { useSyncQueue } from './useSyncQueue'
 
 type ReviewProductsScreenProps = {
   /** The capture just filed, used only to point it out in the list. */
@@ -27,14 +38,35 @@ function formatCapturedAt(value: string) {
 }
 
 export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScreenProps) {
-  // Everything captured in this session, newest first — the one just filed included.
-  const { submissions } = useProductSubmissions()
+  const s = useThemedStyles(makeStyles)
+  // Everything captured in this session, newest first — the one just filed
+  // included — plus what the queue still owes the server.
+  const { submissions, counts, progress, lastError, syncNow, refresh } = useSyncQueue()
+  const colors = useColors()
+
+  // Separate from the queue's own `progress` so the pull spinner tracks the
+  // gesture rather than an automatic sync the collector did not ask for.
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true)
+    try {
+      await refresh()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [refresh])
 
   const justCapturedId = item?.client_id
 
   return (
     <SafeAreaView style={s.screen} edges={['top', 'left', 'right']}>
       <ScreenHeader title="REVIEW PRODUCTS" />
+      <SyncStatusBar
+        queued={counts.queued}
+        progress={progress}
+        lastError={lastError}
+        onSyncNow={syncNow}
+      />
       <View style={s.actions}>
         <Pressable style={s.back} onPress={onBack}>
           <Text style={s.backText}>‹ Back</Text>
@@ -44,7 +76,19 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={s.body}>
+      <ScrollView
+        contentContainerStyle={s.body}
+        // Pull to refresh: re-reads the stored queue and retries whatever it
+        // still owes the server.
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
+      >
         <View style={s.queueHeader}>
           <Text style={s.queueTitle}>
             Captured{submissions.length ? ` (${submissions.length})` : ''}
@@ -55,7 +99,7 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
           <Text style={s.empty}>Nothing captured yet.</Text>
         )}
 
-        {submissions.map(({ id, payload, status, submissionId, error }) => (
+        {submissions.map(({ id, payload, status, submissionId, error, matchType }) => (
           <Pressable
             key={id}
             style={[s.card, id === justCapturedId && s.cardJustSent]}
@@ -65,7 +109,13 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
               {/* Draft is what an accepted capture is to a collector: filed with
                   the server, not yet judged by a moderator. */}
               <Text style={status === 'failed' ? s.statusFailed : s.status}>
-                {status === 'failed' ? 'NOT SENT' : 'DRAFT'}
+                {status === 'failed'
+                  ? 'NOT SENT'
+                  : status === 'queued'
+                    ? 'QUEUED'
+                    : status === 'syncing'
+                      ? 'SENDING…'
+                      : 'DRAFT'}
               </Text>
               {id === justCapturedId ? (
                 <Text style={s.statusPill}>Just submitted</Text>
@@ -76,7 +126,20 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
               )}
             </View>
 
-            {status === 'failed' && !!error && <Text style={s.errorLine}>{error}</Text>}
+            {status !== 'draft' && !!error && <Text style={s.errorLine}>{error}</Text>}
+            {status === 'draft' && !!error && <Text style={s.noteLine}>{error}</Text>}
+
+            {/* Says so for as long as the capture is listed. The alert at submit
+                time is gone once dismissed, and a capture that synced in the
+                background never raised one — this is what stops the same
+                product being walked back to and captured a second time. */}
+            {(matchType === 'possible_duplicate' || matchType === 'existing_variant') && (
+              <Text style={s.duplicateLine}>
+                {matchType === 'existing_variant'
+                  ? 'Already in the catalog — your scan confirms the existing entry.'
+                  : 'Looks like a product already in the catalog. A reviewer will decide.'}
+              </Text>
+            )}
 
             <Text style={s.title}>{payload.product.name}</Text>
             <Text style={s.meta}>
@@ -148,7 +211,9 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.screen },
   actions: {
     flexDirection: 'row',
@@ -165,7 +230,9 @@ const s = StyleSheet.create({
     paddingVertical: 8,
   },
   doneText: { color: colors.onAccent, fontWeight: '800' },
-  body: { padding: 16, paddingBottom: 40 },
+  // flexGrow so a short list still fills the viewport and can be dragged;
+  // without it there is nothing to pull when only one capture is listed.
+  body: { flexGrow: 1, padding: 16, paddingBottom: 40 },
 
   queueHeader: {
     flexDirection: 'row',
@@ -187,6 +254,15 @@ const s = StyleSheet.create({
   cardJustSent: { borderColor: colors.primaryBorder, backgroundColor: colors.primaryBg },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   status: { color: colors.primary, fontWeight: '800', letterSpacing: 0.5 },
+  duplicateLine: {
+    // Amber, not red: a suspected duplicate is a caution the reviewer
+    // settles, not a failure the collector has to fix.
+    color: colors.eyebrow,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 6,
+  },
+  noteLine: { color: colors.textMuted, fontSize: 12, marginTop: 6 },
   statusFailed: { color: colors.dangerText, fontWeight: '800', letterSpacing: 0.5 },
   errorLine: { fontSize: 12, color: colors.dangerText, marginTop: 6, lineHeight: 17 },
   submissionId: { fontSize: 10, color: colors.textMuted, marginTop: 4 },
@@ -262,3 +338,4 @@ const s = StyleSheet.create({
   mediaStatus: { color: colors.textMuted, marginTop: 3, fontSize: 11 },
 
 })
+

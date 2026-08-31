@@ -1,8 +1,8 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { Dropdown, Field } from '../../../components'
-import { colors } from '../../../theme/colors'
-import { controls } from '../../../theme/styles'
+import type { Palette } from '../../../theme/colors'
+import { makeControls, useColors, useThemedStyles } from '../../../theme/useColors'
 import type { PackagingLevelDraft } from '../../../types/product'
 
 const LEVELS = [
@@ -40,6 +40,9 @@ export function createEmptyPackaging(): PackagingLevelDraft {
 }
 
 export function PackagingForm({ value, onChange, onSubmit, onCancel }: PackagingFormProps) {
+  const controls = useThemedStyles(makeControls)
+  const colors = useColors()
+  const s = useThemedStyles(makeStyles)
   return (
     <View style={s.card}>
       <Text style={s.title}>Add Packaging</Text>
@@ -148,7 +151,9 @@ export function PackagingForm({ value, onChange, onSubmit, onCancel }: Packaging
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   card: {
     marginTop: 10,
     borderWidth: 1,
@@ -182,3 +187,4 @@ const s = StyleSheet.create({
   },
   secondaryText: { color: colors.textSubtle, fontWeight: '700' },
 })
+

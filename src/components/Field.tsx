@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { Text, View } from 'react-native'
-
-import { forms } from '../theme/styles'
+import { makeForms, useThemedStyles } from '../theme/useColors'
 
 type FieldProps = {
   label: string
@@ -10,6 +9,7 @@ type FieldProps = {
 
 /** Label on the left, control filling the remaining width. */
 export function Field({ label, children }: FieldProps) {
+  const forms = useThemedStyles(makeForms)
   return (
     <View style={forms.row}>
       <Text style={forms.rowLabel}>{label}</Text>

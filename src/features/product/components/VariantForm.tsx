@@ -1,8 +1,8 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { Checkbox, Field } from '../../../components'
-import { colors } from '../../../theme/colors'
-import { controls } from '../../../theme/styles'
+import type { Palette } from '../../../theme/colors'
+import { makeControls, useColors, useThemedStyles } from '../../../theme/useColors'
 import type { AttributeDefinition } from '../../../types/catalog'
 import type { VariantDraft } from '../../../types/product'
 import { AttributeControl } from './AttributeControl'
@@ -33,6 +33,9 @@ export function VariantForm({
   isEditing,
   canSubmit,
 }: VariantFormProps) {
+  const controls = useThemedStyles(makeControls)
+  const colors = useColors()
+  const s = useThemedStyles(makeStyles)
   const actionLabel = isEditing ? 'UPDATE VARIANT' : '+  ADD VARIANT'
 
   return (
@@ -96,7 +99,9 @@ export function VariantForm({
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   card: {
     borderWidth: 1.5,
     borderColor: colors.primarySoft,
@@ -131,3 +136,4 @@ const s = StyleSheet.create({
   cancel: { marginTop: 10, alignItems: 'center' },
   cancelText: { fontSize: 13, color: colors.textMuted, fontWeight: '600' },
 })
+

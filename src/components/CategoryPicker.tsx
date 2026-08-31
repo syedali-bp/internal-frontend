@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react'
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { findCategoryTrail } from '../lib/categoryTree'
-import { colors } from '../theme/colors'
-import { controls } from '../theme/styles'
+import type { Palette } from '../theme/colors'
+import { makeControls, useColors, useThemedStyles } from '../theme/useColors'
 import type { CategoryNode } from '../types/catalog'
 
 type CategoryPickerProps = {
@@ -27,6 +27,8 @@ export function CategoryPicker({
   placeholder,
   disabled = false,
 }: CategoryPickerProps) {
+  const controls = useThemedStyles(makeControls)
+  const s = useThemedStyles(makeStyles)
   const [isOpen, setIsOpen] = useState(false)
   // The ancestors currently drilled into; empty means we are at the root level.
   const [trail, setTrail] = useState<CategoryNode[]>([])
@@ -148,7 +150,9 @@ export function CategoryPicker({
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   valueText: { fontSize: 14, color: colors.text, flex: 1 },
   valueAncestor: { color: colors.textMuted },
   valueLeaf: { color: colors.text, fontWeight: '600' },
@@ -214,3 +218,4 @@ const s = StyleSheet.create({
     borderTopColor: colors.border,
   },
 })
+

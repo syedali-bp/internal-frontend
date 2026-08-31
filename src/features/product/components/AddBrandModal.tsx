@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { Dropdown } from '../../../components'
-import { colors } from '../../../theme/colors'
-import { controls, forms } from '../../../theme/styles'
+import type { Palette } from '../../../theme/colors'
+import { makeControls, makeForms, useColors, useThemedStyles } from '../../../theme/useColors'
 import type { Vertical } from '../../../types/catalog'
 
 /**
@@ -54,6 +54,10 @@ export function AddBrandModal({
   manufacturerOptions,
   currentManufacturerId,
 }: AddBrandModalProps) {
+  const controls = useThemedStyles(makeControls)
+  const forms = useThemedStyles(makeForms)
+  const colors = useColors()
+  const s = useThemedStyles(makeStyles)
   const [name, setName] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
   const [selectedCodes, setSelectedCodes] = useState<string[]>([])
@@ -182,7 +186,9 @@ export function AddBrandModal({
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: colors.backdrop,
@@ -237,3 +243,4 @@ const s = StyleSheet.create({
   saveText: { color: colors.onAccent, fontWeight: '800', fontSize: 14 },
   disabled: { opacity: 0.5 },
 })
+

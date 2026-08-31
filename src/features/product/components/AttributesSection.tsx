@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import { colors } from '../../../theme/colors'
+import type { Palette } from '../../../theme/colors'
+import { useColors, useThemedStyles } from '../../../theme/useColors'
 import type { AttributeDefinition, AttributeValue, AttributeValues } from '../../../types/catalog'
 import { AttributeField } from './AttributeField'
 
@@ -18,6 +19,7 @@ export function AttributesSection({
   onChange,
   hasCategory,
 }: AttributesSectionProps) {
+  const s = useThemedStyles(makeStyles)
   if (!hasCategory) {
     return <Text style={s.note}>Select a category to see its attributes.</Text>
   }
@@ -40,7 +42,9 @@ export function AttributesSection({
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   card: {
     borderWidth: 1,
     borderColor: colors.attributeBorder,
@@ -51,3 +55,4 @@ const s = StyleSheet.create({
   },
   note: { fontSize: 13, color: colors.textMuted, paddingVertical: 6 },
 })
+

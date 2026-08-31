@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -13,8 +13,8 @@ import { COUNTRIES } from '../../constants/countries'
 import { CURRENCY_OPTIONS, UOM_OPTIONS } from '../../constants/options'
 import * as api from '../../api/api'
 import { formatCategoryPath } from '../../lib/categoryTree'
-import { colors } from '../../theme/colors'
-import { controls, forms } from '../../theme/styles'
+import type { Palette } from '../../theme/colors'
+import { makeControls, makeForms, useColors, useThemedStyles } from '../../theme/useColors'
 import type { SubmissionPayload } from '../../types/product'
 import { AddBrandModal, type NewBrand } from './components/AddBrandModal'
 import { AddManufacturerModal, type NewManufacturer } from './components/AddManufacturerModal'
@@ -24,16 +24,38 @@ import { MediaSection } from './components/MediaSection'
 import { PayloadPreview } from './components/PayloadPreview'
 import { SavedVariantRow } from './components/SavedVariantRow'
 import { ScreenHeader } from './components/ScreenHeader'
+import { SyncStatusBar } from './components/SyncStatusBar'
+import { useSyncQueue } from './useSyncQueue'
 import { VariantForm } from './components/VariantForm'
 import { verticalUsesModelNumber } from './modelNumber'
+import { useBarcodeLookup } from './barcodeLookup'
 import { useBrands } from './useBrands'
 import { useCategories } from './useCategories'
 import { useManufacturers } from './useManufacturers'
 import { useProductCapture } from './useProductCapture'
 import { useVerticals } from './useVerticals'
 
+/**
+ * Said once, beside every field a contribution cannot change.
+ *
+ * Approval fills only empty fields, so a value already on file would be
+ * discarded whatever is typed over it. Locking the input is how that becomes
+ * visible before the work is done rather than after it is thrown away.
+ */
+const ON_FILE_HINT = 'Already in the catalog — left as it is.'
+
 type AddProductScreenProps = {
   barcode?: string
+  /**
+   * True when the scan resolved to a product the catalog already holds and the
+   * collector chose to fill its gaps.
+   *
+   * Changes what the screen says, not what it does: the capture is submitted
+   * the same way either way, and the server decides from the barcode that this
+   * enriches an existing variant rather than creating a product. Approval fills
+   * only empty fields, so nothing typed here can overwrite catalog data.
+   */
+  contributing?: boolean
   onBack: () => void
   onSubmitted: (payload: SubmissionPayload) => void
 }
@@ -45,7 +67,42 @@ type AddProductScreenProps = {
  * that variants needed. Nothing is saved mid-capture any more, so there is
  * nothing to split the form across.
  */
-export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScreenProps) {
+export function AddProductScreen({ barcode, contributing, onBack, onSubmitted }: AddProductScreenProps) {
+  const controls = useThemedStyles(makeControls)
+  const forms = useThemedStyles(makeForms)
+  const colors = useColors()
+  const s = useThemedStyles(makeStyles)
+  // The offline queue, for the banner above the form.
+  const sync = useSyncQueue()
+
+  // What the catalog already holds for this barcode, when the collector came
+  // here from the scan-result card to fill its gaps. Cached by the query from
+  // that screen, so this is normally an instant read rather than a second trip.
+  const { data: lookup } = useBarcodeLookup(contributing ? barcode : undefined)
+  const enriching = Boolean(contributing && lookup?.found)
+
+  /**
+   * What the form is seeded with, once the lookup answers.
+   *
+   * Memoised on the lookup rather than rebuilt inline: the hook applies it from
+   * an effect, and a fresh object every render would re-fire that effect for as
+   * long as the screen was open.
+   */
+  const prefill = useMemo(
+    () =>
+      enriching
+        ? {
+            name: lookup!.product_name,
+            description: lookup!.description,
+            defaultUom: '',
+            verticalId: lookup!.vertical_id,
+            categoryId: lookup!.category_id,
+            brandId: lookup!.brand_id,
+          }
+        : undefined,
+    [enriching, lookup],
+  )
+
   const {
     details,
     setDetail,
@@ -59,7 +116,38 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
     payload,
     submitting,
     submit,
-  } = useProductCapture(barcode ?? '')
+  } = useProductCapture(barcode ?? '', prefill)
+
+  /**
+   * The gaps worth naming to the collector.
+   *
+   * Price is always offered by the server because it is about the shop rather
+   * than the product, so listing it as "missing from the catalog" would be
+   * misleading — it is never on file for anybody.
+   */
+  const contributionGaps = useMemo(
+    () => (enriching ? lookup!.missing.filter((gap) => gap.field !== 'observed_price') : []),
+    [enriching, lookup],
+  )
+
+  /**
+   * Whether a field is already on file and so must not be edited here.
+   *
+   * Driven by the server's `missing` list rather than by checking the value:
+   * which fields a contribution can fill is a rule about how approval merges a
+   * capture, and approval fills only empty fields. A field the server did not
+   * call missing would have its value discarded, so offering it as editable
+   * would invite work that is silently thrown away.
+   *
+   * Nothing is locked for an ordinary new-product capture.
+   */
+  const isLocked = useCallback(
+    (field: string) => {
+      if (!enriching) return false
+      return !lookup!.missing.some((gap) => gap.field === field)
+    },
+    [enriching, lookup],
+  )
 
   const { verticals, isLoading: verticalsLoading, error: verticalsError } = useVerticals()
   const { tree: categoryTree } = useCategories(details.verticalId)
@@ -198,15 +286,37 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
   return (
     <SafeAreaView style={s.screen} edges={['top', 'left', 'right']}>
       <ScreenHeader title="ADD PRODUCT" />
+      {/* The count has to be visible while capturing, not only on review: it is
+          how a collector working out of signal knows the backlog is growing. */}
+      <SyncStatusBar
+        queued={sync.counts.queued}
+        progress={sync.progress}
+        lastError={sync.lastError}
+        onSyncNow={sync.syncNow}
+      />
       <Pressable style={s.back} onPress={onBack}>
         <Text style={s.backText}>‹ Back</Text>
       </Pressable>
 
       <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
         <Text style={s.intro}>
-          Everything below is captured as one submission and kept on this device, where the
-          review screen lists it.
+          {enriching
+            ? 'Adding to a product the catalog already holds. Details on file are shown but locked — only the gaps below can be filled.'
+            : 'Everything below is captured as one submission and kept on this device, where the review screen lists it.'}
         </Text>
+
+        {/* Names the product being contributed to, so a collector who scrolled
+            past the scan card can still tell what they are adding to. */}
+        {enriching ? (
+          <View style={s.contributing}>
+            <Text style={s.contributingTitle}>{lookup!.product_name}</Text>
+            <Text style={s.contributingText}>
+              {contributionGaps.length > 0
+                ? `You can add: ${contributionGaps.map((gap) => gap.label).join(', ')}.`
+                : 'Nothing is missing — you can still record the price at this store.'}
+            </Text>
+          </View>
+        ) : null}
 
         {!!barcode && (
           <View style={s.barcodeBox}>
@@ -236,6 +346,10 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
           value={details.verticalId}
           options={verticalOptions}
           onChange={handleVerticalChange}
+          // Where the product belongs is settled by the row the barcode
+          // resolved to. Letting a contribution move it would re-file somebody
+          // else's product from a screen meant for adding a photo.
+          disabled={enriching}
           placeholder={
             verticalsLoading
               ? 'Loading verticals...'
@@ -251,18 +365,23 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
           nodes={categoryTree}
           onChange={(value) => setDetail('categoryId', value)}
           placeholder={categoryPlaceholder}
-          disabled={!details.verticalId}
+          disabled={!details.verticalId || enriching}
         />
+        {enriching && lookup?.category_name ? (
+          <Text style={s.lockedHint}>On file: {lookup.category_name}</Text>
+        ) : null}
 
         {/* ---------------- What it is ---------------- */}
         <Text style={forms.label}>Product Name:</Text>
         <TextInput
-          style={controls.input}
+          style={[controls.input, isLocked('name') && s.lockedInput]}
           value={details.name}
           onChangeText={(value) => setDetail('name', value)}
           placeholder="Olpers Full Cream Milk"
           placeholderTextColor={colors.placeholder}
+          editable={!isLocked('name')}
         />
+        {isLocked('name') ? <Text style={s.lockedHint}>{ON_FILE_HINT}</Text> : null}
 
         {showModelNumber && (
           <>
@@ -310,6 +429,7 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
               value={details.brandId}
               options={brandOptions}
               onChange={(value) => setDetail('brandId', value)}
+              disabled={isLocked('brand')}
               placeholder={
                 brandsLoading
                   ? 'Loading...'
@@ -321,10 +441,17 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
               }
             />
           </View>
-          <Pressable style={s.addSmall} onPress={() => setBrandModalOpen(true)}>
-            <Text style={s.addSmallText}>+ Add</Text>
-          </Pressable>
+          {!isLocked('brand') ? (
+            <Pressable style={s.addSmall} onPress={() => setBrandModalOpen(true)}>
+              <Text style={s.addSmallText}>+ Add</Text>
+            </Pressable>
+          ) : null}
         </View>
+        {isLocked('brand') ? (
+          <Text style={s.lockedHint}>
+            On file: {lookup?.brand_name || 'already recorded'}. Left as it is.
+          </Text>
+        ) : null}
         <Text style={s.fieldHint}>
           {details.manufacturerId
             ? `Showing ${selectedManufacturer?.name ?? 'this manufacturer'}'s brands only.`
@@ -333,20 +460,29 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
 
         <Text style={forms.label}>Description:</Text>
         <TextInput
-          style={[controls.input, controls.multiline]}
+          style={[controls.input, controls.multiline, isLocked('description') && s.lockedInput]}
           value={details.description}
           onChangeText={(value) => setDetail('description', value)}
           multiline
           placeholder="1L tetra pack"
           placeholderTextColor={colors.placeholder}
+          editable={!isLocked('description')}
         />
+        {isLocked('description') ? <Text style={s.lockedHint}>{ON_FILE_HINT}</Text> : null}
 
-        <Text style={forms.label}>Tags:</Text>
-        <TagInput
-          tags={details.tags}
-          onChange={(tags) => setDetail('tags', tags)}
-          placeholder="halal, imported, sugar-free"
-        />
+        {/* Tags are the catalog's own taxonomy, and a collector cannot see
+            which ones the product already carries. Offering the field on a
+            contribution invited edits the merge then discarded. */}
+        {!enriching ? (
+          <>
+            <Text style={forms.label}>Tags:</Text>
+            <TagInput
+              tags={details.tags}
+              onChange={(tags) => setDetail('tags', tags)}
+              placeholder="halal, imported, sugar-free"
+            />
+          </>
+        ) : null}
 
         <Text style={forms.label}>Default UOM:</Text>
         <Dropdown
@@ -354,7 +490,9 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
           options={UOM_OPTIONS}
           onChange={(value) => setDetail('defaultUom', value)}
           placeholder="Select unit of measure"
+          disabled={isLocked('uom')}
         />
+        {isLocked('uom') ? <Text style={s.lockedHint}>{ON_FILE_HINT}</Text> : null}
 
         <Text style={forms.label}>Country of Origin:</Text>
         <SearchableSelect
@@ -399,12 +537,24 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
         {/* ------- Product-level attributes for this category ------- */}
         <SectionHeader text="ATTRIBUTES" color={colors.attribute} />
 
-        <AttributesSection
-          definitions={productLevel}
-          values={attributeValues}
-          onChange={setAttribute}
-          hasCategory={!!details.categoryId}
-        />
+        {enriching ? (
+          // Attributes reach the product through mergeSpecs, which fills only
+          // keys the product has no answer for and silently drops the rest. The
+          // lookup does not say which those are, so the screen cannot tell a
+          // collector which answers would survive — and offering all of them
+          // meant editing "Biscuit Type" and watching nothing change.
+          <Text style={s.note}>
+            This product's attributes are already recorded. Ask a reviewer if any of them need
+            correcting.
+          </Text>
+        ) : (
+          <AttributesSection
+            definitions={productLevel}
+            values={attributeValues}
+            onChange={setAttribute}
+            hasCategory={!!details.categoryId}
+          />
+        )}
 
         {/* ------------- Photos and documents ------------- */}
         <SectionHeader text="MEDIA" color={colors.primary} />
@@ -421,7 +571,16 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
         {/* ------------- Variants, built from the axes ------------- */}
         <SectionHeader text="VARIANTS" color={colors.text} />
 
-        {!details.categoryId ? (
+        {enriching ? (
+          // A contribution adds to a pack the catalog already sells, so its
+          // variants, SKUs and pack sizes are already on file. The merge writes
+          // none of them, and a SKU typed here would collide with the unique
+          // index rather than update anything.
+          <Text style={s.note}>
+            This product's variants, SKUs and pack sizes are already in the catalog. Ask a
+            reviewer if any of them need correcting.
+          </Text>
+        ) : !details.categoryId ? (
           <Text style={s.note}>Select a category to see what its variants are made of.</Text>
         ) : (
           <>
@@ -499,7 +658,9 @@ export function AddProductScreen({ barcode, onBack, onSubmitted }: AddProductScr
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.screen },
   body: { padding: 16, paddingBottom: 48 },
   back: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
@@ -550,6 +711,21 @@ const s = StyleSheet.create({
   addSmallText: { color: colors.primary, fontWeight: '800', fontSize: 13 },
   clearLink: { fontSize: 12, fontWeight: '700', color: colors.primary, marginTop: 7 },
   fieldHint: { fontSize: 11, color: colors.textMuted, marginTop: 6 },
+  // A locked field still shows its value — the collector needs to read it to
+  // know they are working on the right pack — so it is dimmed rather than
+  // hidden, and the screen background marks it as not an input.
+  lockedInput: { backgroundColor: colors.screen, color: colors.textMuted },
+  lockedHint: { fontSize: 11, color: colors.textMuted, fontStyle: 'italic', marginTop: 6 },
+  contributing: {
+    backgroundColor: colors.primaryHighlight,
+    borderColor: colors.primaryBorder,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 12,
+    padding: 12,
+  },
+  contributingTitle: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  contributingText: { color: colors.textSubtle, fontSize: 12, lineHeight: 17, marginTop: 4 },
 
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   priceInput: { flex: 1 },
@@ -565,3 +741,4 @@ const s = StyleSheet.create({
   submitBusy: { opacity: 0.6 },
   submitText: { color: colors.onAccent, fontWeight: '800', fontSize: 15, letterSpacing: 0.5 },
 })
+

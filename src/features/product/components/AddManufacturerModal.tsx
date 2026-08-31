@@ -3,8 +3,8 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 
 import { SearchableSelect } from '../../../components'
 import { COUNTRIES } from '../../../constants/countries'
-import { colors } from '../../../theme/colors'
-import { controls, forms } from '../../../theme/styles'
+import type { Palette } from '../../../theme/colors'
+import { makeControls, makeForms, useColors, useThemedStyles } from '../../../theme/useColors'
 
 /** The body `POST /api/catalog/manufacturer/add` accepts. Only the name is required. */
 export type NewManufacturer = {
@@ -44,6 +44,10 @@ export function AddManufacturerModal({
   saving,
   error,
 }: AddManufacturerModalProps) {
+  const controls = useThemedStyles(makeControls)
+  const forms = useThemedStyles(makeForms)
+  const colors = useColors()
+  const s = useThemedStyles(makeStyles)
   const [name, setName] = useState('')
   const [country, setCountry] = useState('')
   const [website, setWebsite] = useState('')
@@ -144,7 +148,9 @@ export function AddManufacturerModal({
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: colors.backdrop,
@@ -184,3 +190,4 @@ const s = StyleSheet.create({
   saveText: { color: colors.onAccent, fontWeight: '800', fontSize: 14 },
   disabled: { opacity: 0.5 },
 })
+

@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
-import { colors } from '../theme/colors'
-import { controls } from '../theme/styles'
+import type { Palette } from '../theme/colors'
+import { makeControls, useColors, useThemedStyles } from '../theme/useColors'
 import type { DropdownOption } from './Dropdown'
 
 type SearchableSelectProps = {
@@ -28,6 +28,9 @@ export function SearchableSelect({
   searchPlaceholder = 'Search',
   disabled = false,
 }: SearchableSelectProps) {
+  const controls = useThemedStyles(makeControls)
+  const colors = useColors()
+  const s = useThemedStyles(makeStyles)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
 
@@ -101,7 +104,9 @@ export function SearchableSelect({
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   valueText: { fontSize: 14, color: colors.text, flex: 1 },
   placeholder: { fontSize: 14, color: colors.placeholder, flex: 1 },
   caret: { fontSize: 16, color: colors.textMuted, marginTop: -6 },
@@ -128,3 +133,4 @@ const s = StyleSheet.create({
   optionText: { fontSize: 15, color: colors.text },
   empty: { padding: 18, fontSize: 14, color: colors.textMuted },
 })
+

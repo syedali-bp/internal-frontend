@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
-import { colors } from '../theme/colors'
-import { controls } from '../theme/styles'
+import type { Palette } from '../theme/colors'
+import { makeControls, useColors, useThemedStyles } from '../theme/useColors'
 
 type TagInputProps = {
   tags: readonly string[]
@@ -16,6 +16,9 @@ type TagInputProps = {
  * case-insensitive, which keeps "Halal" and "halal" from both being stored.
  */
 export function TagInput({ tags, onChange, placeholder = 'Add a tag' }: TagInputProps) {
+  const controls = useThemedStyles(makeControls)
+  const colors = useColors()
+  const s = useThemedStyles(makeStyles)
   const [draft, setDraft] = useState('')
 
   const commit = (raw: string) => {
@@ -82,7 +85,9 @@ export function TagInput({ tags, onChange, placeholder = 'Add a tag' }: TagInput
   )
 }
 
-const s = StyleSheet.create({
+/** Built from the palette so the theme toggle repaints it. */
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   chip: {
     flexDirection: 'row',
@@ -99,3 +104,4 @@ const s = StyleSheet.create({
   chipRemove: { fontSize: 15, color: colors.textMuted, marginTop: -2 },
   hint: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
 })
+
