@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import {
@@ -116,6 +124,7 @@ export function AddProductScreen({ barcode, contributing, onBack, onSubmitted }:
     payload,
     submitting,
     submit,
+    refetchAttributes,
   } = useProductCapture(barcode ?? '', prefill)
 
   /**
@@ -160,8 +169,13 @@ export function AddProductScreen({ barcode, contributing, onBack, onSubmitted }:
     [enriching, lookup],
   )
 
-  const { verticals, isLoading: verticalsLoading, error: verticalsError } = useVerticals()
-  const { tree: categoryTree } = useCategories(details.verticalId)
+  const {
+    verticals,
+    isLoading: verticalsLoading,
+    error: verticalsError,
+    refetch: refetchVerticals,
+  } = useVerticals()
+  const { tree: categoryTree, refetch: refetchCategories } = useCategories(details.verticalId)
 
   const {
     manufacturers,
@@ -176,6 +190,40 @@ export function AddProductScreen({ barcode, contributing, onBack, onSubmitted }:
     isLoading: brandsLoading,
     refetch: refetchBrands,
   } = useBrands(details.manufacturerId)
+
+  /**
+   * Re-reads the reference data the form is built out of.
+   *
+   * All five together, because they are one answer to the collector: a form
+   * that is missing the brand added on another handset an hour ago is stale in
+   * a way the collector cannot tell apart from a category that never had it.
+   *
+   * `allSettled` rather than `all` — one list failing should not stop the other
+   * four from updating, and the screen already shows a per-list error where it
+   * matters. Nothing typed is touched: these refill the pickers, and the
+   * capture's own state lives elsewhere.
+   */
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const refreshReferenceData = useCallback(async () => {
+    setIsRefreshing(true)
+    try {
+      await Promise.allSettled([
+        refetchVerticals(),
+        refetchCategories(),
+        refetchAttributes(),
+        refetchManufacturers(),
+        refetchBrands(),
+      ])
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [
+    refetchVerticals,
+    refetchCategories,
+    refetchAttributes,
+    refetchManufacturers,
+    refetchBrands,
+  ])
 
   const createManufacturer = api.useCreateManufacturer()
   const createBrand = api.useCreateBrand()
@@ -309,7 +357,22 @@ export function AddProductScreen({ barcode, contributing, onBack, onSubmitted }:
         <Text style={s.backText}>‹ Back</Text>
       </Pressable>
 
-      <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={s.body}
+        keyboardShouldPersistTaps="handled"
+        // Pull to refresh, the same gesture Select Store and Review use. The
+        // reference data behind this form is fetched once when the screen
+        // opens, and a session outlasts that: a brand or category added
+        // elsewhere mid-visit is otherwise unreachable without restarting.
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => void refreshReferenceData()}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
+      >
         <Text style={s.intro}>
           {enriching
             ? 'Adding to a product the catalog already holds. Details on file are shown but locked — only the gaps below can be filled.'

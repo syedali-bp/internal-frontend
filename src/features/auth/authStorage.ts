@@ -67,3 +67,53 @@ export async function clearSession(): Promise<void> {
     // Nothing to do: the in-memory session is cleared by the caller regardless.
   }
 }
+
+/**
+ * The phone number the last sign-in used, kept so the login form can offer it.
+ *
+ * Deliberately its own key, and deliberately outlives `clearSession`: signing
+ * out ends the session, and the point of remembering the number is that the
+ * next sign-in is the same person on the same handset. A collector logs in
+ * often and types an eleven-digit number on a phone keypad each time.
+ *
+ * The number only. The password is never written anywhere: it is the one thing
+ * that makes a stolen unlocked handset less than a stolen account, and a
+ * pre-filled password would hand the account to whoever picks the phone up.
+ */
+const LAST_PHONE_KEY = 'ventrie.collector.last_phone'
+
+/** Remembers the number a sign-in used. Failures are ignored — see the header. */
+export async function saveLastPhone(phone: string): Promise<void> {
+  const trimmed = phone.trim()
+  if (!trimmed) return
+
+  try {
+    await SecureStore.setItemAsync(LAST_PHONE_KEY, trimmed)
+  } catch {
+    // The convenience is lost, the login is not.
+  }
+}
+
+/** The remembered number, or empty when there is none. */
+export async function loadLastPhone(): Promise<string> {
+  try {
+    return (await SecureStore.getItemAsync(LAST_PHONE_KEY)) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Forgets the remembered number.
+ *
+ * Not called by signing out — see above — but kept for the case where a handset
+ * changes hands and the next collector should not be offered someone else's
+ * number.
+ */
+export async function clearLastPhone(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(LAST_PHONE_KEY)
+  } catch {
+    // Nothing to do.
+  }
+}

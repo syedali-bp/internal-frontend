@@ -2,6 +2,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import type { Palette } from '../../../theme/colors'
 import { useColors, useThemedStyles } from '../../../theme/useColors'
+import { storeLocationLine } from '../addressNormalization'
 import type { ActiveSession } from '../sessionStore'
 
 type SessionBarProps = {
@@ -30,8 +31,10 @@ export function SessionBar({ session, queuedCount = 0, onEndSession }: SessionBa
   const s = useThemedStyles(makeStyles)
 
   const storeName = session.store ? session.store.name : 'No fixed store'
+  // The bar is one line above the screen it sits on, so this is where a long
+  // address costs the most. Display only — the session's store is unchanged.
   const place = session.store
-    ? [session.store.address, session.store.city].filter(Boolean).join(', ')
+    ? storeLocationLine(session.store) || 'No address recorded'
     : 'Street-side supplier'
 
   const confirm = () => {

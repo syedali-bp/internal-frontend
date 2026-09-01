@@ -122,7 +122,7 @@ export function useProductCapture(barcode: string, prefill?: CapturePrefill) {
   // Attachments are product-level, so they survive a change of category.
   const mediaList = useProductMedia()
 
-  const { definitions } = useAttributes(details.categoryId)
+  const { definitions, refetch: refetchAttributes } = useAttributes(details.categoryId)
 
   const { productLevel, variantAxes } = useMemo(
     () => splitDefinitions(definitions),
@@ -340,5 +340,7 @@ export function useProductCapture(barcode: string, prefill?: CapturePrefill) {
     payload,
     submitting,
     submit,
+    /** Re-reads this category's attribute definitions — see the pull to refresh. */
+    refetchAttributes,
   }
 }

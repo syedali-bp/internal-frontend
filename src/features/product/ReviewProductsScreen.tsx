@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import {
+  Alert,
   Image,
   Pressable,
   RefreshControl,
@@ -56,6 +57,28 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
     }
   }, [refresh])
 
+  /**
+   * Discards one capture, after asking.
+   *
+   * Confirmed rather than immediate because this is the one irreversible action
+   * on the screen: a capture that has not reached the server exists nowhere
+   * else, and the collector would have to walk back to the shelf to make it
+   * again. The wording says which case they are in, since discarding a capture
+   * the server already holds costs nothing but the row.
+   */
+  const confirmRemove = useCallback((id: string, name: string, synced: boolean) => {
+    Alert.alert(
+      'Discard this capture?',
+      synced
+        ? `"${name}" has already reached the server. Removing it here only clears it from this list.`
+        : `"${name}" has not been sent yet. Discarding it here loses it for good.`,
+      [
+        { text: 'Keep', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: () => removeSubmission(id) },
+      ],
+    )
+  }, [])
+
   const justCapturedId = item?.client_id
 
   return (
@@ -99,7 +122,18 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
           <Text style={s.empty}>Nothing captured yet.</Text>
         )}
 
-        {submissions.map(({ id, payload, status, submissionId, error, matchType }) => (
+        {submissions.map(({ id, payload, status, submissionId, error, matchType }) => {
+          // `loadQueue` already rebuilds every stored entry, so these hold in
+          // the ordinary case. Repeated here because this screen is the one
+          // holding a collector's unsynced work: a capture that cannot be
+          // redone is worth two guards, and a payload can also reach this list
+          // straight from `addSubmission` without passing through storage.
+          const product = payload.product ?? ({} as SubmissionPayload['product'])
+          const attributes = product.attributes ?? {}
+          const variants = payload.variants ?? []
+          const media = payload.media ?? []
+
+          return (
           <Pressable
             key={id}
             style={[s.card, id === justCapturedId && s.cardJustSent]}
@@ -117,11 +151,21 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
                       ? 'SENDING…'
                       : 'DRAFT'}
               </Text>
-              {id === justCapturedId ? (
+              {/* The just-captured badge gives way once the capture has failed:
+                  a row saying NOT SENT with no way to clear it is the dead end
+                  this screen exists to avoid. */}
+              {id === justCapturedId && status !== 'failed' ? (
                 <Text style={s.statusPill}>Just submitted</Text>
               ) : (
-                <Pressable onPress={() => removeSubmission(id)}>
-                  <Text style={s.removePill}>Remove</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() =>
+                    confirmRemove(id, product.name || 'this capture', status === 'draft')
+                  }
+                >
+                  <Text style={s.removePill}>
+                    {status === 'failed' ? 'Discard' : 'Remove'}
+                  </Text>
                 </Pressable>
               )}
             </View>
@@ -141,38 +185,38 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
               </Text>
             )}
 
-            <Text style={s.title}>{payload.product.name}</Text>
+            <Text style={s.title}>{product.name || 'Untitled capture'}</Text>
             <Text style={s.meta}>
               {/* The name, not the id — the id used to be what showed here. */}
-              {payload.product.brand_name || 'No brand'} ·{' '}
+              {product.brand_name || 'No brand'} ·{' '}
               {payload.category_path || 'Uncategorised'}
             </Text>
-            <Text style={s.desc} numberOfLines={2}>{payload.product.description || 'No description added.'}</Text>
+            <Text style={s.desc} numberOfLines={2}>{product.description || 'No description added.'}</Text>
 
             <View style={s.factRow}>
               <Text style={s.fact}>{payload.scanned_barcode || 'No barcode'}</Text>
-              <Text style={s.fact}>{payload.product.default_uom || 'No UOM'}</Text>
+              <Text style={s.fact}>{product.default_uom || 'No UOM'}</Text>
               <Text style={s.fact}>{formatPrice(payload)}</Text>
             </View>
 
             <View style={s.section}>
               <Text style={s.sectionTitle}>Captured</Text>
               <Text style={s.countLine}>
-                {Object.keys(payload.product.attributes).length} attributes ·{' '}
-                {payload.variants.length} variants · {payload.media.length} media
+                {Object.keys(attributes).length} attributes ·{' '}
+                {variants.length} variants · {media.length} media
               </Text>
               <Text style={s.timestamp}>{formatCapturedAt(payload.captured_at)}</Text>
               {/* Do not display raw ids in the UI */}
             </View>
 
-            {!!payload.media.length && (
+            {!!media.length && (
               <View style={s.section}>
                 <Text style={s.sectionTitle}>Media</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.mediaScroll}>
-                  {payload.media.map((media) => (
-                    <View key={media.local_uri} style={s.thumbWrap}>
+                  {media.map((item, idx) => (
+                    <View key={item.local_uri || idx} style={s.thumbWrap}>
                       <Image
-                        source={{ uri: media.public_url || media.local_uri }}
+                        source={{ uri: item.public_url || item.local_uri }}
                         style={s.thumb}
                         resizeMode="cover"
                       />
@@ -182,17 +226,20 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
               </View>
             )}
 
-            {!!payload.variants.length && (
+            {!!variants.length && (
               <View style={s.section}>
                 <Text style={s.sectionTitle}>Variants</Text>
                 <View style={s.variantsRow}>
-                  {payload.variants.map((v, idx) => (
+                  {variants.map((v, idx) => {
+                    const axes = v.axes ?? {}
+                    return (
                     <View key={idx} style={s.variantChip}>
                       <Text style={s.variantText} numberOfLines={1}>
-                        {v.sku || Object.keys(v.axes).map(k => `${k}:${v.axes[k]}`).join(', ')}
+                        {v.sku || Object.keys(axes).map(k => `${k}:${axes[k]}`).join(', ')}
                       </Text>
                     </View>
-                  ))}
+                    )
+                  })}
                 </View>
               </View>
             )}
@@ -204,7 +251,8 @@ export function ReviewProductsScreen({ item, onBack, onDone }: ReviewProductsScr
               </View>
             )}
           </Pressable>
-        ))}
+          )
+        })}
 
       </ScrollView>
     </SafeAreaView>

@@ -22,6 +22,49 @@ export type SyncProgress = {
 }
 
 /**
+ * How many times a capture is sent before the queue stops offering it.
+ *
+ * A capture that has failed this often is not waiting on a connection: five
+ * passes span reconnects, foregrounds and launches, so whatever is wrong is not
+ * going to right itself. Retrying past here spends the collector's data on a
+ * request that has already been refused five times, and hides the one capture
+ * that needs a person behind a counter that never goes down.
+ */
+const MAX_SYNC_ATTEMPTS = 5
+
+/**
+ * Reads the HTTP status out of the error `request` throws.
+ *
+ * The message is built in api.ts as `Request failed ${status}: ${body}`. Parsed
+ * from text rather than carried on a typed error because every call site
+ * upstream already treats these as plain Errors; a typed error would be the
+ * better shape and a much wider change.
+ */
+function statusOf(message: string): number | null {
+  const matched = /^Request failed (\d{3}):/.exec(message)
+  return matched ? Number(matched[1]) : null
+}
+
+/**
+ * Whether sending this capture again could ever answer differently.
+ *
+ * A 4xx is the server having read the request and refused it — a malformed
+ * body, a vertical id that is not a real one, a session that does not exist.
+ * The same bytes will be refused the same way on every pass, so these stop
+ * immediately rather than after five identical rejections.
+ *
+ * 408 and 429 are the exceptions: both are the server asking for the request
+ * later, not saying no to it. 5xx and transport failures stay retryable.
+ */
+function isPermanentFailure(message: string): boolean {
+  const status = statusOf(message)
+  if (status === null) return false
+  if (status === 408 || status === 429) return false
+
+  return status >= 400 && status < 500
+}
+
+/**
  * Only one pass runs at a time.
  *
  * Auto-sync and the Sync now button can both fire at once — on reconnect while
@@ -154,10 +197,34 @@ export function syncQueue(onProgress?: (progress: SyncProgress) => void): Promis
 
         result.sent += 1
       } catch (caught) {
-        // Back to queued, not failed: an unreachable server is the ordinary
-        // case here, and the next pass should pick this up untouched.
         const message = caught instanceof Error ? caught.message : 'Sync failed'
-        updateSubmission(entry.id, { status: 'queued', error: message })
+
+        // Back to queued for anything that could still go through — an
+        // unreachable server is the ordinary case here, and the next pass
+        // should pick it up untouched.
+        //
+        // `failed` is the other answer, and it is a terminal one: the queue
+        // stops offering the capture, and the review row says NOT SENT with the
+        // reason. Two ways to reach it — the server refused the body outright,
+        // or it has now been refused enough times that the next attempt is not
+        // worth the collector's data.
+        const permanent = isPermanentFailure(message)
+        const exhausted = attempts >= MAX_SYNC_ATTEMPTS
+
+        if (permanent || exhausted) {
+          updateSubmission(entry.id, {
+            status: 'failed',
+            // Says which of the two it was, because the fix differs: a refused
+            // body needs someone to look at the capture, a run of failures
+            // usually needs the connection looked at first.
+            error: permanent
+              ? message
+              : `Gave up after ${attempts} attempts. ${message}`,
+          })
+        } else {
+          updateSubmission(entry.id, { status: 'queued', error: message })
+        }
+
         result.failed += 1
       }
     }

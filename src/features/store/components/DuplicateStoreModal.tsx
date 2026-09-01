@@ -2,6 +2,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 
 import type { Palette } from '../../../theme/colors'
 import { useThemedStyles } from '../../../theme/useColors'
+import { storeLocationLine } from '../addressNormalization'
 import { storeTypeLabel, type StoreDuplicateCandidate } from '../storeApi'
 
 type DuplicateStoreModalProps = {
@@ -77,11 +78,12 @@ export function DuplicateStoreModal({
                   ) : null}
                 </View>
 
-                {candidate.address || candidate.city ? (
-                  <Text style={s.rowMeta}>
-                    {[candidate.address, candidate.city, candidate.region]
-                      .filter(Boolean)
-                      .join(', ')}
+                {/* Shortened the same way the picker shortens it, so the shop
+                    a collector is comparing against reads the same in both
+                    places. The stored address is untouched. */}
+                {storeLocationLine(candidate) ? (
+                  <Text style={s.rowMeta} numberOfLines={2}>
+                    {storeLocationLine(candidate)}
                   </Text>
                 ) : null}
 

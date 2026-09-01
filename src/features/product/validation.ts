@@ -1,6 +1,6 @@
 import type { AttributeDefinition, AttributeValues } from '../../types/catalog'
 import type { ProductDetails, Variant } from '../../types/product'
-import { isAttributeMissing } from './attributeValues'
+import { isAttributeMissing, isNumericAnswerInvalid } from './attributeValues'
 
 /**
  * Everything one submission must have before it is worth a moderator's time.
@@ -35,6 +35,16 @@ export function validateCapture(
   if (!details.verticalId) errors.push('Product vertical is required.')
   if (!details.categoryId) errors.push('Category is required.')
 
+  // Checked before the contribution early-return below, because an unreadable
+  // number is wrong whoever typed it: a contribution carries its answers to the
+  // server exactly as a new product does. Silently dropping it would file the
+  // capture with the field blank and tell the collector nothing.
+  productLevel.forEach((definition) => {
+    if (isNumericAnswerInvalid(definition, values[definition.code] ?? '')) {
+      errors.push(`${definition.name} must be a number.`)
+    }
+  })
+
   // Everything below describes a product being created. A contribution adds to
   // one that already exists, so its variants and attributes are already on file.
   if (contributing) return errors
@@ -58,6 +68,8 @@ export function validateCapture(
     axes.forEach((axis) => {
       if (isAttributeMissing(axis, variant.axes[axis.code] ?? '')) {
         errors.push(`${label}: ${axis.name} is required.`)
+      } else if (isNumericAnswerInvalid(axis, variant.axes[axis.code] ?? '')) {
+        errors.push(`${label}: ${axis.name} must be a number.`)
       }
     })
 

@@ -3,6 +3,7 @@ import * as Device from 'expo-device'
 
 import * as api from '../../api/api'
 import { getRefreshToken, setTokens, signOut } from './authSession'
+import { saveLastPhone } from './authStorage'
 
 /**
  * Sign-in and sign-up against the collector auth surface.
@@ -279,11 +280,20 @@ export async function register(input: RegisterInput): Promise<AuthSession> {
 
 /** Signs an existing collector in. Phone is the login, not email. */
 export async function login(phone: string, password: string): Promise<AuthSession> {
+  const normalised = normalisePhone(phone)
+
   try {
-    return await api.postJsonRaw<AuthSession>(LOGIN_URL, {
-      phone: normalisePhone(phone),
+    const session = await api.postJsonRaw<AuthSession>(LOGIN_URL, {
+      phone: normalised,
       password,
     })
+
+    // Remembered only once the server has accepted it, so a typo is never the
+    // number offered back. Stored in the normalised form the server saw, which
+    // is also the form that will work when it is submitted again.
+    void saveLastPhone(normalised)
+
+    return session
   } catch (caught) {
     throw toAuthError(caught)
   }

@@ -34,5 +34,9 @@ export function useVerticals() {
     // fixtures are standing in, the picker is usable and an error banner over a
     // working list is noise.
     error: query.data?.length ? null : query.error,
+    // Worth exposing precisely because of the fixture fallback above: a
+    // refresh is how a collector who started offline — and so is looking at
+    // the stand-in list — gets the real verticals without restarting the app.
+    refetch: query.refetch,
   }
 }

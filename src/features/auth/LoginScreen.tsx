@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pressable, Text, TextInput, View } from 'react-native'
 import { SafeAreaView as SafeAreaScreen } from 'react-native-safe-area-context'
 
@@ -10,6 +10,7 @@ import { ThemeToggle } from '../../theme/ThemeToggle'
 import { AuthField } from './components/AuthField'
 import { login, AuthError } from './authApi'
 import { signInWithSession } from './authSession'
+import { loadLastPhone } from './authStorage'
 
 type LoginScreenProps = {
   /** The company the device is enrolled to, shown above the heading. */
@@ -39,9 +40,30 @@ export function LoginScreen({
   // what field staff reliably have.
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Offered back from the last successful sign-in on this handset, so a
+  // collector who signed out is not re-typing eleven digits on a phone keypad.
+  // Only the number: the password is deliberately never stored.
+  //
+  // Guarded on the field being untouched, because the read is asynchronous and
+  // a collector can start typing before the keystore answers — without it, a
+  // slow read would overwrite what they had already entered.
+  useEffect(() => {
+    let active = true
+
+    void loadLastPhone().then((saved) => {
+      if (!active || !saved) return
+      setPhone((current) => (current ? current : saved))
+    })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Every field on the form shares this: whichever one is focused gets scrolled
   // clear of the keyboard, so the fix is not specific to the password.

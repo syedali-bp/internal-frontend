@@ -13,5 +13,5 @@ export function useCategories(verticalId: string) {
 
   const tree = useMemo(() => buildCategoryTree(verticalId ? categories : []), [verticalId, categories])
 
-  return { tree, isLoading: query.isLoading, error: query.error }
+  return { tree, isLoading: query.isLoading, error: query.error, refetch: query.refetch }
 }

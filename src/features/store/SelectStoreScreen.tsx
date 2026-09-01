@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
@@ -15,6 +15,7 @@ import type { Palette } from '../../theme/colors'
 import { makeControls, useColors, useThemedStyles } from '../../theme/useColors'
 import { useCollector } from '../auth/authSession'
 import { useVerticals } from '../product/useVerticals'
+import { storeLocationLine } from './addressNormalization'
 import { AddStoreModal } from './components/AddStoreModal'
 import { DuplicateStoreModal } from './components/DuplicateStoreModal'
 import { useStoreTypes } from './useStoreTypes'
@@ -47,6 +48,16 @@ type SelectStoreScreenProps = {
  * skips the first step. The session still exists and still has a vertical; only
  * `store_id` is null.
  */
+/**
+ * How long the search box waits before asking the server.
+ *
+ * The same 300ms the address search in AddStoreModal uses. Every change of the
+ * term is a new query key and so a new request, and a collector types faster
+ * than a round trip completes: without this, "Imtiaz" was six requests, five of
+ * them already stale before they answered.
+ */
+const SEARCH_DEBOUNCE_MS = 300
+
 export function SelectStoreScreen({ onSessionStarted }: SelectStoreScreenProps) {
   const controls = useThemedStyles(makeControls)
   const colors = useColors()
@@ -66,12 +77,27 @@ export function SelectStoreScreen({ onSessionStarted }: SelectStoreScreenProps) 
   // recognised that is itself still awaiting approval. The wording differs.
   const [noteKind, setNoteKind] = useState<'created' | 'pending'>('created')
 
+  // What the box shows updates on every keystroke; what the query asks for
+  // settles once typing pauses. Kept as two pieces of state rather than one so
+  // the field stays responsive while the list does not thrash.
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const filters = useMemo(
-    () => ({ search, store_type: typeFilter }),
-    [search, typeFilter],
+    () => ({ search: debouncedSearch, store_type: typeFilter }),
+    [debouncedSearch, typeFilter],
   )
 
   const { data, isLoading, error, refetch, isFetching } = useStores(filters)
+
+  // True from the first keystroke until the results for it are on screen —
+  // the debounce window included, which `isFetching` alone does not cover.
+  // Without it the list would answer "No stores match" for the previous term
+  // while the collector is mid-word.
+  const isSearchPending = search !== debouncedSearch || isFetching
 
   // Separate from isFetching so the spinner in the pull gesture is not also
   // triggered by a background refetch the collector did not ask for — same
@@ -337,16 +363,27 @@ export function SelectStoreScreen({ onSessionStarted }: SelectStoreScreenProps) 
             />
           }
           ListEmptyComponent={
-            <View style={s.state}>
-              <Text style={s.stateTitle}>
-                {search.trim() || typeFilter ? 'No stores match' : 'No stores yet'}
-              </Text>
-              <Text style={s.stateText}>
-                {search.trim() || typeFilter
-                  ? 'Nothing found for that search — add the store below if it is missing.'
-                  : 'No stores found — add one below to get started.'}
-              </Text>
-            </View>
+            // A pending search says so rather than answering. "No stores match"
+            // is a result, and showing it over a request that has not come back
+            // told the collector their shop was missing while it was still
+            // being looked for.
+            isSearchPending ? (
+              <View style={s.state}>
+                <ActivityIndicator color={colors.accent} />
+                <Text style={s.stateText}>Searching…</Text>
+              </View>
+            ) : (
+              <View style={s.state}>
+                <Text style={s.stateTitle}>
+                  {search.trim() || typeFilter ? 'No stores match' : 'No stores yet'}
+                </Text>
+                <Text style={s.stateText}>
+                  {search.trim() || typeFilter
+                    ? 'Nothing found for that search — add the store below if it is missing.'
+                    : 'No stores found — add one below to get started.'}
+                </Text>
+              </View>
+            )
           }
           renderItem={({ item }) => (
             <Pressable
@@ -368,9 +405,12 @@ export function SelectStoreScreen({ onSessionStarted }: SelectStoreScreenProps) 
                 <Text style={s.rowName}>{item.name}</Text>
                 {/* Only what was recorded: an empty line reads as a missing
                     value rather than as spacing. */}
-                {item.address || item.city ? (
-                  <Text style={s.rowMeta}>
-                    {[item.address, item.city, item.region].filter(Boolean).join(', ')}
+                {/* Shortened for the row, not in the record: the stored
+                    address keeps every part, which is what review and duplicate
+                    detection read. See addressNormalization.ts. */}
+                {storeLocationLine(item) ? (
+                  <Text style={s.rowMeta} numberOfLines={2}>
+                    {storeLocationLine(item)}
                   </Text>
                 ) : null}
               </View>

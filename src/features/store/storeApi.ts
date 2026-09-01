@@ -208,6 +208,13 @@ export function useStores(filters: StoreFilters) {
       return api.fetcher<Store[]>(storesUrl(filters))
     },
     retry: 1,
+    // Typing changes the key, and a new key has no cached data — so without
+    // this the list emptied between keystrokes and the screen answered "No
+    // stores match" while the request for those characters was still in
+    // flight. Holding the previous page keeps the last real answer on screen
+    // until the next one arrives, so an empty list always means an empty
+    // result rather than a pending one.
+    placeholderData: (previous) => previous,
   })
 }
 

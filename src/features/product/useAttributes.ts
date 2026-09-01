@@ -20,5 +20,10 @@ const NO_DEFINITIONS: AttributeDefinition[] = []
 export function useAttributes(categoryId: string) {
   const query = api.useAttributes(categoryId)
   const definitions: AttributeDefinition[] = query.data ?? NO_DEFINITIONS
-  return { definitions, isLoading: query.isLoading, error: query.error }
+  return {
+    definitions,
+    isLoading: query.isLoading,
+    error: query.error,
+    refetch: query.refetch,
+  }
 }
