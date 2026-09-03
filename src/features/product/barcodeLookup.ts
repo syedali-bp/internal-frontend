@@ -29,6 +29,32 @@ export type MissingField = {
   label: string
 }
 
+/** One photo on file. `variant_id` is empty for a photo of the product itself. */
+export type LookupMedia = {
+  kind: string
+  public_url: string
+  variant_id: string
+}
+
+/** One pack of the product. `scanned` marks the one the code resolved to. */
+export type LookupVariant = {
+  id: string
+  name: string
+  sku_code: string
+  net_content: number
+  net_content_unit: string
+  barcodes: string[]
+  scanned: boolean
+}
+
+/** One recorded answer, already rendered by the server for display. */
+export type LookupSpec = {
+  label: string
+  value: string
+  /** Empty for an answer about the product rather than about one pack. */
+  variant_id: string
+}
+
 export type BarcodeLookup = {
   found: boolean
   barcode: string
@@ -49,6 +75,12 @@ export type BarcodeLookup = {
   thumbnail: string
   /** How many independent collectors have scanned this code. */
   verified_scan_count: number
+  /** Every photo on file, not just the thumbnail. */
+  media: LookupMedia[]
+  /** Every pack of the product, the scanned one flagged. */
+  variants: LookupVariant[]
+  /** The recorded answers, product-level first. */
+  specs: LookupSpec[]
   missing: MissingField[]
 }
 

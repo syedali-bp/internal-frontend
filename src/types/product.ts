@@ -49,6 +49,12 @@ export type ProductDetails = {
   modelNumber: string
   /** Free-text search/classification chips, e.g. `['halal', 'sugar-free']`. */
   tags: string[]
+  /**
+   * Which pack the scanned code was printed on — `unit`, `inner_pack`, `case`
+   * or `pallet`. A can and its 24-tray carry different codes, and the code
+   * cannot say which it is, so the collector answers it.
+   */
+  scannedPackagingLevel: string
   /** Unit the product is sold in by default — one of `UOM_OPTIONS`. Maps to the
    *  submission's `uom`. */
   defaultUom: string
@@ -82,6 +88,8 @@ export type SubmissionPayload = {
   session_id: string
   /** Raw scan value; empty when nothing was scanned. */
   scanned_barcode: string
+  /** Which pack that code was on. The server defaults it to `unit`. */
+  scanned_packaging_level: string
   /** Category breadcrumb as picked in the app. */
   category_path: string
   /** Device clock at capture time, ISO 8601. */

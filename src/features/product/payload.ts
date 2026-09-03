@@ -119,6 +119,7 @@ export function buildSubmissionPayload(
     client_id: capture.clientId,
     session_id: capture.sessionId,
     scanned_barcode: capture.barcode,
+    scanned_packaging_level: details.scannedPackagingLevel,
     category_path: capture.categoryPath,
     captured_at: new Date().toISOString(),
     product: {

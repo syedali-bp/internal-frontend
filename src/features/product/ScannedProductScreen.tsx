@@ -82,9 +82,21 @@ export function ScannedProductScreen({
   }
 
   const product = data as NonNullable<typeof data>
+  // Defaulted rather than read straight off the response: a server that predates
+  // these lists omits them, and so does a lookup answered from cache before they
+  // existed. Either way the screen has to render, not crash.
+  // A barcode identifies one pack, not a product, so this screen is about that
+  // pack: the collector is holding a 250ml can, and the 1.5L bottle's photos and
+  // pack size are not what they need to recognise it.
+  const scanned = (product.variants ?? []).find((variant) => variant.scanned)
+  const media = (product.media ?? []).filter((asset) => asset.variant_id === scanned?.id)
+  const specs = product.specs ?? []
+  // The pack's own photo leads. The product thumbnail is the fallback, and it
+  // may well be a different size of the same thing.
+  const cover = media[0]?.public_url || product.thumbnail
   // Price is always offered, so it alone does not mean the product needs
   // anything: what makes this worth a collector's time is a gap in the catalog.
-  const catalogGaps = product.missing.filter((gap) => gap.field !== 'observed_price')
+  const catalogGaps = (product.missing ?? []).filter((gap) => gap.field !== 'observed_price')
 
   return (
     <SafeAreaScreen style={s.screen} edges={['top', 'left', 'right']}>
@@ -95,8 +107,8 @@ export function ScannedProductScreen({
 
       <ScrollView contentContainerStyle={s.body}>
         <View style={s.card}>
-          {product.thumbnail ? (
-            <Image source={{ uri: product.thumbnail }} style={s.photo} resizeMode="cover" />
+          {cover ? (
+            <Image source={{ uri: cover }} style={s.photo} resizeMode="cover" />
           ) : (
             // Said plainly rather than left as an empty box: a product with no
             // photo is the single most common reason this screen is worth
@@ -108,7 +120,18 @@ export function ScannedProductScreen({
 
           <View style={s.cardCopy}>
             {product.brand_name ? <Text style={s.brand}>{product.brand_name}</Text> : null}
-            {product.category_name ? (
+            {scanned ? (
+              <Text style={s.category}>
+                {[
+                  scanned.name || scanned.sku_code,
+                  scanned.net_content
+                    ? `${scanned.net_content} ${scanned.net_content_unit}`.trim()
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join('  ·  ')}
+              </Text>
+            ) : product.category_name ? (
               <Text style={s.category}>{product.category_name}</Text>
             ) : null}
             <Text style={s.code}>{product.barcode}</Text>
@@ -120,6 +143,45 @@ export function ScannedProductScreen({
                 : `Confirmed by ${product.verified_scan_count} scan${product.verified_scan_count === 1 ? '' : 's'}`}
             </Text>
           </View>
+        </View>
+
+        {/* This pack's own photos. A collector deciding whether a photo is
+            worth taking has to see what is already on file for the thing in
+            their hand — another size's photos would answer the wrong question. */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Photos of this pack</Text>
+          {media.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.strip}>
+              {media.map((asset, index) => (
+                <View key={`${asset.public_url}-${index}`} style={s.stripItem}>
+                  <Image source={{ uri: asset.public_url }} style={s.stripPhoto} resizeMode="cover" />
+                  <Text style={s.stripCaption} numberOfLines={1}>
+                    {asset.kind.replace(/^photo_/, '').replace(/_/g, ' ')}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={s.sectionEmpty}>
+              No photos of this pack yet — this is the gap worth closing.
+            </Text>
+          )}
+        </View>
+
+        {/* What the catalog already answers about it, so a collector does not
+            re-type something that is on file. */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Specification</Text>
+          {specs.length > 0 ? (
+            specs.map((spec, index) => (
+              <View key={`${spec.label}-${index}`} style={s.specRow}>
+                <Text style={s.specLabel}>{spec.label}</Text>
+                <Text style={s.specValue}>{spec.value}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={s.sectionEmpty}>Nothing recorded yet.</Text>
+          )}
         </View>
 
         {catalogGaps.length > 0 ? (
@@ -211,6 +273,34 @@ const makeStyles = (colors: Palette) =>
     category: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
     code: { color: colors.textSubtle, fontSize: 12, marginTop: 6 },
     scans: { color: colors.textMuted, fontSize: 12, marginTop: 4 },
+    section: {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderRadius: 14,
+      borderWidth: 1,
+      marginTop: 14,
+      padding: 16,
+    },
+    sectionTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
+    sectionEmpty: { color: colors.textMuted, fontSize: 13, marginTop: 8 },
+    strip: { gap: 10, paddingTop: 12 },
+    stripItem: { width: 88 },
+    stripPhoto: { borderRadius: 10, height: 88, width: 88 },
+    stripCaption: {
+      color: colors.textMuted,
+      fontSize: 11,
+      marginTop: 4,
+      textAlign: 'center',
+      textTransform: 'capitalize',
+    },
+    specRow: {
+      flexDirection: 'row',
+      gap: 12,
+      justifyContent: 'space-between',
+      marginTop: 8,
+    },
+    specLabel: { color: colors.textMuted, flexShrink: 1, fontSize: 13 },
+    specValue: { color: colors.textSubtle, fontSize: 13, fontWeight: '700', textAlign: 'right' },
     gaps: {
       backgroundColor: colors.surface,
       borderColor: colors.border,

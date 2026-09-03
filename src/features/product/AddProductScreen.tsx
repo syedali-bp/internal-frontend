@@ -18,7 +18,7 @@ import {
   TagInput,
 } from '../../components'
 import { COUNTRIES } from '../../constants/countries'
-import { CURRENCY_OPTIONS, UOM_OPTIONS } from '../../constants/options'
+import { CURRENCY_OPTIONS, PACKAGING_LEVELS, UOM_OPTIONS } from '../../constants/options'
 import * as api from '../../api/api'
 import { formatCategoryPath } from '../../lib/categoryTree'
 import type { Palette } from '../../theme/colors'
@@ -401,6 +401,27 @@ export function AddProductScreen({ barcode, contributing, onBack, onSubmitted }:
               editable={false}
               placeholderTextColor={colors.placeholder}
             />
+
+            {/* A can and its 24-tray carry different codes, and the code cannot
+                say which it is. Answered here so the catalog knows what the
+                scan buys. */}
+            <Text style={s.barcodeLabel}>What did you scan?</Text>
+            <View style={s.levelRow}>
+              {PACKAGING_LEVELS.map((level) => {
+                const chosen = details.scannedPackagingLevel === level.value
+                return (
+                  <Pressable
+                    key={level.value}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: chosen }}
+                    style={[s.levelChip, chosen && s.levelChipOn]}
+                    onPress={() => setDetail('scannedPackagingLevel', level.value)}
+                  >
+                    <Text style={[s.levelChipText, chosen && s.levelChipTextOn]}>{level.label}</Text>
+                  </Pressable>
+                )
+              })}
+            </View>
           </View>
         )}
 
@@ -769,6 +790,17 @@ const makeStyles = (colors: Palette) =>
   backText: { color: colors.primary, fontWeight: '700' },
   intro: { fontSize: 13, color: colors.textMuted, lineHeight: 19, marginBottom: 6 },
 
+  levelRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  levelChip: {
+    borderColor: colors.inputBorder,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  levelChipOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  levelChipText: { color: colors.textSubtle, fontSize: 13, fontWeight: '700' },
+  levelChipTextOn: { color: colors.onAccent },
   barcodeBox: {
     marginTop: 12,
     borderWidth: 1,

@@ -26,6 +26,7 @@ const INITIAL_DETAILS: ProductDetails = {
   verticalId: '',
   modelNumber: '',
   tags: [],
+  scannedPackagingLevel: 'unit',
   defaultUom: '',
   countryOfOrigin: '',
   notes: '',

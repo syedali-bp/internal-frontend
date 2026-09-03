@@ -27,3 +27,11 @@ export const CURRENCY_OPTIONS = ['PKR', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'CNY'
 export const DEFAULT_CURRENCY = 'PKR'
 export const COLORS = ['Black', 'Blue', 'Titanium Gray', 'Violet']
 export const STORAGES = ['128GB', '256GB', '512GB', '1TB']
+
+/** How a variant is packed, smallest first — what a scanned code can be on. */
+export const PACKAGING_LEVELS: Array<{ value: string; label: string }> = [
+  { value: 'unit', label: 'Single item' },
+  { value: 'inner_pack', label: 'Multi-pack' },
+  { value: 'case', label: 'Case' },
+  { value: 'pallet', label: 'Pallet' },
+]
